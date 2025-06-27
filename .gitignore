@@ -1,4 +1,8 @@
 __pycache__/
 *.pyc
-forecasts/
+*.pyo
+*.log
 .env
+venv/
+.env/
+.venv/
