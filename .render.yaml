@@ -2,6 +2,6 @@ services:
   - type: web
     name: ai-telegram-bot
     env: python
-    pythonVersion: 3.11.x
+    pythonVersion: 3.11.9
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
