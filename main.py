@@ -13,7 +13,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Boolean
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
@@ -28,9 +28,13 @@ class Forecast(Base):
     id = Column(Integer, primary_key=True)
     sport = Column(String)
     file_id = Column(String)
+    used = Column(Boolean, default=False)  # Новое поле для отметки использования
 
 async def init_db():
     async with engine.begin() as conn:
+        # Удаляем таблицы (если есть), чтобы применить новую схему
+        await conn.run_sync(Base.metadata.drop_all)
+        # Создаем таблицы заново
         await conn.run_sync(Base.metadata.create_all)
 
 BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
@@ -120,7 +124,9 @@ async def full_start(message: Message, state: FSMContext):
     async with SessionLocal() as session:
         for sport in CATEGORIES:
             result = await session.execute(
-                Forecast.__table__.select().where(Forecast.sport == sport)
+                Forecast.__table__.select().where(
+                    (Forecast.sport == sport) & (Forecast.used == False)
+                )
             )
             rows = result.fetchall()
             user_forecasts[sport] = [row.file_id for row in rows]
@@ -169,7 +175,7 @@ async def save_forecast(callback: CallbackQuery, state: FSMContext):
     sport = callback.data.replace("save_to_", "")
 
     async with SessionLocal() as session:
-        forecast = Forecast(sport=sport, file_id=photo_id)
+        forecast = Forecast(sport=sport, file_id=photo_id, used=False)
         session.add(forecast)
         await session.commit()
 
@@ -215,6 +221,23 @@ async def process_payment_choice(callback: CallbackQuery, state: FSMContext):
         return
 
     file_id = files.pop(0)
+
+    # Отмечаем прогноз как использованный в базе
+    async with SessionLocal() as session:
+        forecast = await session.execute(
+            Forecast.__table__.select().where(
+                (Forecast.sport == sport) & (Forecast.file_id == file_id) & (Forecast.used == False)
+            )
+        )
+        forecast_row = forecast.fetchone()
+        if forecast_row:
+            await session.execute(
+                Forecast.__table__.update()
+                .where(Forecast.id == forecast_row.id)
+                .values(used=True)
+            )
+            await session.commit()
+
     await callback.message.answer_photo(file_id, caption=f"{sport.capitalize()}")
 
     user_forecasts[sport] = files
