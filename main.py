@@ -11,8 +11,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 
-BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
-ADMIN_ID = 6688088575
+from database import async_session, Forecast, init_db  # ✅ добавлено
+
+BOT_TOKEN = os.getenv("BOT_TOKEN") or "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
+ADMIN_ID = int(os.getenv("ADMIN_ID") or 6688088575)
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
 
 bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
@@ -94,18 +96,14 @@ async def handle_intro_button(callback: CallbackQuery, state: FSMContext):
     await full_start(callback.message, state)
 
 async def full_start(message: Message, state: FSMContext):
-    data = await state.get_data()
-    user_forecasts = data.get("user_forecasts")
-
-    if not user_forecasts:
+    async with async_session() as session:
         user_forecasts = {}
         for sport in CATEGORIES:
-            folder = f"forecasts/{sport}"
-            try:
-                files = [f for f in os.listdir(folder) if f.lower().endswith((".png", ".jpg", ".jpeg"))]
-            except FileNotFoundError:
-                files = []
-            user_forecasts[sport] = files.copy()
+            result = await session.execute(
+                Forecast.__table__.select().where(Forecast.category == sport)
+            )
+            forecasts = result.fetchall()
+            user_forecasts[sport] = forecasts.copy()
         await state.update_data(user_forecasts=user_forecasts)
 
     await message.answer("Выбери категорию спорта для получения прогноза:",
@@ -150,14 +148,9 @@ async def save_forecast(callback: CallbackQuery, state: FSMContext):
     photo_id = data.get("photo_id")
     sport = callback.data.replace("save_to_", "")
 
-    folder = f"forecasts/{sport}"
-    os.makedirs(folder, exist_ok=True)
-    files = os.listdir(folder)
-    file_name = f"{len(files) + 1}.jpg"
-
-    file = await bot.get_file(photo_id)
-    file_path = file.file_path
-    await bot.download_file(file_path, os.path.join(folder, file_name))
+    async with async_session() as session:
+        session.add(Forecast(category=sport, text=photo_id))
+        await session.commit()
 
     await callback.message.answer(f"✅ Прогноз сохранён в категорию {sport.capitalize()}")
     await state.clear()
@@ -165,22 +158,23 @@ async def save_forecast(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data == "admin_view")
 async def view_forecasts(callback: CallbackQuery):
     report = ""
-    for sport in CATEGORIES:
-        folder = f"forecasts/{sport}"
-        try:
-            count = len([f for f in os.listdir(folder) if f.lower().endswith((".png", ".jpg", ".jpeg"))])
-        except FileNotFoundError:
-            count = 0
-        report += f"{sport.capitalize()}: {count} шт.\n"
+    async with async_session() as session:
+        for sport in CATEGORIES:
+            result = await session.execute(
+                Forecast.__table__.select().where(Forecast.category == sport)
+            )
+            count = len(result.fetchall())
+            report += f"{sport.capitalize()}: {count} шт.\n"
     await callback.message.answer(f"📊 Статистика прогнозов:\n\n{report}")
 
 @dp.callback_query(lambda c: c.data == "admin_clear")
 async def clear_forecasts(callback: CallbackQuery):
-    for sport in CATEGORIES:
-        folder = f"forecasts/{sport}"
-        if os.path.exists(folder):
-            for f in os.listdir(folder):
-                os.remove(os.path.join(folder, f))
+    async with async_session() as session:
+        for sport in CATEGORIES:
+            await session.execute(
+                Forecast.__table__.delete().where(Forecast.category == sport)
+            )
+        await session.commit()
     await callback.message.answer("🗑 Все прогнозы очищены.")
 
 @dp.callback_query(lambda c: c.data == "back_to_start")
@@ -194,29 +188,20 @@ async def process_payment_choice(callback: CallbackQuery, state: FSMContext):
         return
 
     sport = callback.data.replace("buy_", "")
-    data = await state.get_data()
-    user_forecasts = data.get("user_forecasts", {})
 
-    files = user_forecasts.get(sport, [])
-    if not files:
+    async with async_session() as session:
+        result = await session.execute(
+            Forecast.__table__.select().where(Forecast.category == sport)
+        )
+        forecasts = result.fetchall()
+
+    if not forecasts:
         await callback.answer("Прогнозы закончились 😞", show_alert=True)
         return
 
-    file_name = files.pop(0)
-    file_path = os.path.join(f"forecasts/{sport}", file_name)
-    photo = FSInputFile(file_path)
+    photo_id = forecasts[0].text
 
-    emoji = "⚽️" if sport == "football" else "🏒" if sport == "hockey" else "🎮"
-    await callback.message.answer_photo(photo, caption=f"{sport.capitalize()} {emoji}")
-
-    user_forecasts[sport] = files
-    await state.update_data(user_forecasts=user_forecasts)
-
-    try:
-        await callback.message.edit_reply_markup(reply_markup=generate_categories_keyboard(user_forecasts))
-    except Exception:
-        pass
-
+    await callback.message.answer_photo(photo_id, caption=f"{sport.capitalize()} 🧠")
     await callback.answer()
 
 @dp.message(lambda message: message.video)
@@ -224,6 +209,7 @@ async def get_video_file_id(message: Message):
     await message.answer(f"<b>file_id:</b> <code>{message.video.file_id}</code>")
 
 async def main():
+    await init_db()  # ✅ инициализация БД
     print("🤖 Бот запущен.")
     await dp.start_polling(bot)
 
