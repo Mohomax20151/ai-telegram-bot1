@@ -2,8 +2,8 @@ import os
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import ParseMode, Update, FSInputFile
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, FSInputFile, Message, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import Update, FSInputFile
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -14,11 +14,11 @@ BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
 ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
 
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(token=BOT_TOKEN, parse_mode="HTML")  # Убираем ParseMode и используем строку
 dp = Dispatcher(storage=MemoryStorage())
 
 # Webhook URL
-WEBHOOK_HOST = "https://your-app-name.onrender.com"  # Ваш публичный URL на Render
+WEBHOOK_HOST = "https://ai-telegram-bot1.onrender.com"  # Ваш публичный URL на Render
 WEBHOOK_PATH = f"/{BOT_TOKEN}/"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
@@ -143,7 +143,7 @@ async def main():
     await set_webhook()
 
     # Запускаем aiohttp сервер на Render
-    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
 if __name__ == "__main__":
     asyncio.run(main())
