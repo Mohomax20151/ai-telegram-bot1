@@ -29,7 +29,6 @@ class UploadState(StatesGroup):
 class IntroState(StatesGroup):
     intro_shown = State()
 
-# Добавляем обработку фотографий и текстовых прогнозов
 def generate_categories_keyboard(user_forecasts):
     keyboard = []
     for sport in CATEGORIES:
@@ -93,11 +92,6 @@ async def start_handler(message: types.Message, state: FSMContext):
 
     await full_start(message, state)
 
-@dp.callback_query(lambda c: c.data == "start_predictions")
-async def handle_intro_button(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await full_start(callback.message, state)
-
 async def full_start(message: Message, state: FSMContext):
     data = await state.get_data()
     user_forecasts = data.get("user_forecasts")
@@ -117,13 +111,9 @@ async def full_start(message: Message, state: FSMContext):
                          reply_markup=generate_categories_keyboard(user_forecasts))
     await message.answer("🦅", reply_markup=bottom_keyboard(message.from_user.id))
 
-@dp.message(lambda m: m.text == "🔮 AI прогнозы")
-async def bottom_start(message: Message, state: FSMContext):
-    await full_start(message, state)
-
 @dp.message(lambda m: m.text == "📄 Показать прогнозы текстом")
 async def show_text_forecasts(message: Message, state: FSMContext):
-    # Извлекаем все текстовые прогнозы из базы данных
+    # Получаем все текстовые прогнозы из базы данных
     user_forecasts = {}
     async with SessionLocal() as session:
         for sport in CATEGORIES:
@@ -133,7 +123,7 @@ async def show_text_forecasts(message: Message, state: FSMContext):
                 )
             )
             rows = result.fetchall()
-            user_forecasts[sport] = [row.prediction_text for row in rows]  # Получаем только текст
+            user_forecasts[sport] = [row.prediction_text for row in rows]
 
     # Формируем строку с прогнозами
     forecast_text = ""
@@ -156,48 +146,45 @@ async def admin_upload(callback: CallbackQuery, state: FSMContext):
     await state.set_state(UploadState.waiting_photo)
     await callback.message.answer("📸 Отправьте прогноз в виде фото")
 
-@dp.callback_query(lambda c: c.data == "admin_upload_text")
-async def admin_upload_text(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(UploadState.waiting_forecast_text)
-    await callback.message.answer("📄 Пожалуйста, отправьте прогноз в текстовом формате (с смайлами).")
-    
-    # После этого возвращаем админскую панель
-    await callback.message.edit_reply_markup(reply_markup=admin_menu_keyboard())
+@dp.message(UploadState.waiting_photo)
+async def receive_photo(message: Message, state: FSMContext):
+    if not message.photo:
+        await message.answer("❗ Пожалуйста, отправьте именно фото.")
+        return
 
-@dp.message(UploadState.waiting_forecast_text)
-async def receive_forecast_text(message: Message, state: FSMContext):
-    text = message.text
+    file_id = message.photo[-1].file_id
+    await state.update_data(photo_id=file_id)
+    await state.set_state(UploadState.waiting_category)
 
-    # Сохраняем текстовый прогноз в базе данных
-    async with SessionLocal() as session:
-        for sport in CATEGORIES:
-            forecast = Forecast(sport=sport, prediction_text=text, used=False)
-            session.add(forecast)
-        await session.commit()
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=sport.capitalize(), callback_data=f"save_to_{sport}")]
+            for sport in CATEGORIES
+        ]
+    )
+    await message.answer("Выберите категорию для сохранения:", reply_markup=keyboard)
 
-    await message.answer(f"✅ Прогноз текстом сохранён:\n\n{text}")
-    
-    # Вернем админа в меню после того, как текст сохранен
-    await message.answer("🔧 Вы вернулись в админ-панель.", reply_markup=admin_menu_keyboard())
-    
-    # Очистим состояние
+@dp.callback_query(lambda c: c.data.startswith("save_to_"))
+async def save_forecast(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    photo_id = data.get("photo_id")
+    sport = callback.data.replace("save_to_", "")
+
+    folder = f"forecasts/{sport}"
+    os.makedirs(folder, exist_ok=True)
+    files = os.listdir(folder)
+    file_name = f"{len(files) + 1}.jpg"
+
+    file = await bot.get_file(photo_id)
+    file_path = file.file_path
+    await bot.download_file(file_path, os.path.join(folder, file_name))
+
+    await callback.message.answer(f"✅ Прогноз сохранён в категорию {sport.capitalize()}")
     await state.clear()
-
-@dp.callback_query(lambda c: c.data == "admin_view")
-async def view_forecasts(callback: CallbackQuery):
-    report = ""
-    for sport in CATEGORIES:
-        folder = f"forecasts/{sport}"
-        try:
-            count = len([f for f in os.listdir(folder) if f.lower().endswith((".png", ".jpg", ".jpeg"))])
-        except FileNotFoundError:
-            count = 0
-        report += f"{sport.capitalize()}: {count} шт.\n"
-    await callback.message.answer(f"📊 Статистика прогнозов:\n\n{report}")
 
 @dp.callback_query(lambda c: c.data == "admin_clear")
 async def clear_forecasts(callback: CallbackQuery):
-    # Очистим файлы прогнозов с диска
+    # Удаляем все файлы
     for sport in CATEGORIES:
         folder = f"forecasts/{sport}"
         if os.path.exists(folder):
@@ -210,46 +197,6 @@ async def clear_forecasts(callback: CallbackQuery):
         await session.commit()
 
     await callback.message.answer("🗑 Все прогнозы очищены.")
-
-@dp.callback_query(lambda c: c.data == "back_to_start")
-async def go_back(callback: CallbackQuery, state: FSMContext):
-    await full_start(callback.message, state)
-
-@dp.callback_query()
-async def process_payment_choice(callback: CallbackQuery, state: FSMContext):
-    if callback.data == "none":
-        await callback.answer("Прогнозов в этой категории нет 😞", show_alert=True)
-        return
-
-    sport = callback.data.replace("buy_", "")
-    data = await state.get_data()
-    user_forecasts = data.get("user_forecasts", {})
-
-    files = user_forecasts.get(sport, [])
-    if not files:
-        await callback.answer("Прогнозы закончились 😞", show_alert=True)
-        return
-
-    file_name = files.pop(0)
-    file_path = os.path.join(f"forecasts/{sport}", file_name)
-    photo = FSInputFile(file_path)
-
-    emoji = "⚽️" if sport == "football" else "🏒" if sport == "hockey" else "🎮"
-    await callback.message.answer_photo(photo, caption=f"{sport.capitalize()} {emoji}")
-
-    user_forecasts[sport] = files
-    await state.update_data(user_forecasts=user_forecasts)
-
-    try:
-        await callback.message.edit_reply_markup(reply_markup=generate_categories_keyboard(user_forecasts))
-    except Exception:
-        pass
-
-    await callback.answer()
-
-@dp.message(lambda message: message.video)
-async def get_video_file_id(message: Message):
-    await message.answer(f"<b>file_id:</b> <code>{message.video.file_id}</code>")
 
 async def main():
     print("🤖 Бот запущен.")
