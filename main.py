@@ -2,18 +2,13 @@ import os
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher, types
-from aiogram.enums import ParseMode
-from aiogram.types import (
-    InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, FSInputFile,
-    ReplyKeyboardMarkup, KeyboardButton, Message
-)
+from aiogram.types import ParseMode, Update, FSInputFile
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, FSInputFile, Message, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
-from aiogram.types import Update
-from aiogram.contrib.middlewares.logging import LoggingMiddleware
 
 BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
 ADMIN_ID = 6688088575
@@ -23,13 +18,13 @@ bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher(storage=MemoryStorage())
 
 # Webhook URL
-WEBHOOK_HOST = "https://ai-telegram-bot1.onrender.com"  # Ваш публичный URL на Render
+WEBHOOK_HOST = "https://your-app-name.onrender.com"  # Ваш публичный URL на Render
 WEBHOOK_PATH = f"/{BOT_TOKEN}/"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
-dp.middleware.setup(LoggingMiddleware())
+logger = logging.getLogger(__name__)
 
 # Состояния
 class UploadState(StatesGroup):
@@ -115,7 +110,7 @@ async def on_webhook(request):
 # Устанавливаем Webhook
 async def set_webhook():
     webhook_info = await bot.set_webhook(WEBHOOK_URL)
-    logging.info(f"Webhook set: {webhook_info}")
+    logger.info(f"Webhook set: {webhook_info}")
 
 # Стартуем сервер
 app = web.Application()
@@ -143,7 +138,7 @@ async def full_start(message: Message, state: FSMContext):
 
 # Главная функция
 async def main():
-    print("🤖 Бот запущен.")
+    logger.info("🤖 Бот запущен.")
     # Устанавливаем webhook перед запуском сервера
     await set_webhook()
 
