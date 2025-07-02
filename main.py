@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import Update, Message, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -59,7 +59,7 @@ def bottom_keyboard(user_id):
 
 # Обработчики команд
 @dp.message(Command("start"))
-async def start_handler(message: types.Message, state: FSMContext):
+async def start_handler(message: Message, state: FSMContext):
     data = await state.get_data()
     if not data.get("intro_done"):
         await bot.send_chat_action(message.chat.id, action="upload_video")
