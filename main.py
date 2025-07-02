@@ -5,6 +5,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import Update, FSInputFile
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.filters import Command
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
@@ -15,7 +16,7 @@ ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
 
 bot = Bot(token=BOT_TOKEN, parse_mode="HTML")  # Убираем ParseMode и используем строку
-dp = Dispatcher(storage=MemoryStorage())
+dp = Dispatcher(bot, storage=MemoryStorage())
 
 # Webhook URL
 WEBHOOK_HOST = "https://ai-telegram-bot1.onrender.com"  # Ваш публичный URL на Render
@@ -59,7 +60,7 @@ def bottom_keyboard(user_id):
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 # Обработчики команд
-@dp.message(Command("start"))
+@dp.message_handler(Command("start"))
 async def start_handler(message: types.Message, state: FSMContext):
     data = await state.get_data()
     if not data.get("intro_done"):
