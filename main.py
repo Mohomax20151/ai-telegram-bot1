@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher
-from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup, DefaultBotProperties
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -13,7 +13,8 @@ BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
 ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
 
-bot = Bot(token=BOT_TOKEN, parse_mode="HTML")  # Убираем ParseMode и используем строку
+# Используем DefaultBotProperties для передачи параметров
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher(storage=MemoryStorage())  # Настроение диспетчера
 
 # Webhook URL
