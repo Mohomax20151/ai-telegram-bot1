@@ -1,27 +1,23 @@
 import os
 import logging
 from aiogram import Bot, Dispatcher
-from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup, BotProperties
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
 
-# Токен бота и другие данные
 BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
 ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
 
-# Настройка бота
-bot = Bot(token=BOT_TOKEN)
-bot.set_default(parse_mode="HTML")  # Устанавливаем parse_mode через set_default
-
-# Создание диспетчера
-dp = Dispatcher(storage=MemoryStorage())  # Диспетчер с памятью
+# Создаем объект Bot с параметрами по умолчанию
+bot = Bot(token=BOT_TOKEN, default=BotProperties(parse_mode="HTML"))
+dp = Dispatcher(storage=MemoryStorage())  # Настроение диспетчера
 
 # Webhook URL
-WEBHOOK_HOST = "https://ai-telegram-bot1.onrender.com"
+WEBHOOK_HOST = "https://ai-telegram-bot1.onrender.com"  # Ваш публичный URL на Render
 WEBHOOK_PATH = f"/{BOT_TOKEN}"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
