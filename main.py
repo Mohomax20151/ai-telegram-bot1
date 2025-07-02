@@ -35,7 +35,7 @@ def generate_categories_keyboard(user_forecasts):
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 def admin_menu_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
+    return InlineKeyboardMarkup(inline_keyboard=[ 
         [InlineKeyboardButton(text="📤 Загрузить прогноз", callback_data="admin_upload")],
         [InlineKeyboardButton(text="📊 Просмотр прогнозов", callback_data="admin_view")],
         [InlineKeyboardButton(text="🗑 Очистить прогнозы", callback_data="admin_clear")],
@@ -55,7 +55,7 @@ async def start_handler(message: types.Message, state: FSMContext):
         await bot.send_chat_action(message.chat.id, action="upload_video")
         await message.answer_video(
             video="BAACAgIAAxkBAAIBCGhdn70oSM1KnFvcGOvOjuQ50P2TAAJ4gAACKGXwSjSGuqbploX4NgQ",
-            caption=(
+            caption=( 
                 "🎥 <b>По тенденции развития проекта</b>, в будущем будет выпущено качественное <b>реалистичное видео от AI</b>\n"
                 "📊 <b>На момент создания:</b> 71% побед, средний кэф — 1.78\n"
                 "🧠 <b>Прогнозы формируются на базе AI</b>, ежедневно в 07:00\n"
@@ -79,7 +79,7 @@ async def start_handler(message: types.Message, state: FSMContext):
             "🧩 Расширение функционала внутри бота"
         )
 
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[ 
             [InlineKeyboardButton(text="🔮 AI прогнозы", callback_data="start_predictions")]
         ])
         await message.answer("Нажмите, чтобы перейти в раздел прогнозов:", reply_markup=keyboard)
@@ -108,7 +108,7 @@ async def full_start(message: Message, state: FSMContext):
             user_forecasts[sport] = files.copy()
         await state.update_data(user_forecasts=user_forecasts)
 
-    await message.answer("Выбери категорию спорта для получения прогноза:",
+    await message.answer("Выбери категорию спорта для получения прогноза:", 
                          reply_markup=generate_categories_keyboard(user_forecasts))
     await message.answer("🦅", reply_markup=bottom_keyboard(message.from_user.id))
 
@@ -137,8 +137,8 @@ async def receive_photo(message: Message, state: FSMContext):
     await state.set_state(UploadState.waiting_category)
 
     keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=sport.capitalize(), callback_data=f"save_to_{sport}")]
+        inline_keyboard=[ 
+            [InlineKeyboardButton(text=sport.capitalize(), callback_data=f"save_to_{sport}")] 
             for sport in CATEGORIES
         ]
     )
@@ -225,6 +225,8 @@ async def get_video_file_id(message: Message):
 
 async def main():
     print("🤖 Бот запущен.")
+    # Получаем порт из переменной окружения PORT
+    port = int(os.environ.get('PORT', 10000))  # Порт по умолчанию 10000
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
