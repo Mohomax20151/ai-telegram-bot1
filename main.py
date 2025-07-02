@@ -144,9 +144,9 @@ async def main():
     await set_webhook()
 
     # Запускаем aiohttp сервер на Render
-    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
 if __name__ == "__main__":
     # Убираем использование asyncio.run()
     # Платформа уже запускает главный цикл, поэтому избегаем использования asyncio.run
-    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
