@@ -2,8 +2,9 @@ import os
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import Update, FSInputFile
+from aiogram.types import Update, InputFile
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
@@ -58,7 +59,7 @@ def bottom_keyboard(user_id):
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 # Обработчики команд
-@dp.message_handler(commands=['start'])
+@dp.message(Command("start"))
 async def start_handler(message: types.Message, state: FSMContext):
     data = await state.get_data()
     if not data.get("intro_done"):
