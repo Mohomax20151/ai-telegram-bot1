@@ -2,9 +2,8 @@ import os
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import Update, InputFile  # Изменено с FSInputFile на InputFile
+from aiogram.types import Update, FSInputFile
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
-from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
@@ -59,13 +58,13 @@ def bottom_keyboard(user_id):
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 # Обработчики команд
-@dp.message(Command("start"))
+@dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message, state: FSMContext):
     data = await state.get_data()
     if not data.get("intro_done"):
         await bot.send_chat_action(message.chat.id, action="upload_video")
         await message.answer_video(
-            InputFile("path_to_video"),  # Используем InputFile
+            video="BAACAgIAAxkBAAIBCGhdn70oSM1KnFvcGOvOjuQ50P2TAAJ4gAACKGXwSjSGuqbploX4NgQ",
             caption=( 
                 "🎥 <b>По тенденции развития проекта</b>, в будущем будет выпущено качественное <b>реалистичное видео от AI</b>\n"
                 "📊 <b>На момент создания:</b> 71% побед, средний кэф — 1.78\n"
