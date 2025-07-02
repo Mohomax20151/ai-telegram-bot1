@@ -14,13 +14,13 @@ BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
 ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
 
-bot = Bot(token=BOT_TOKEN, parse_mode="HTML")  # Убираем ParseMode и используем строку
+bot = Bot(token=8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ, parse_mode="HTML")  # Убираем ParseMode и используем строку
 dp = Dispatcher(storage=MemoryStorage())
 
 # Webhook URL
 WEBHOOK_HOST = "https://ai-telegram-bot1.onrender.com"  # Ваш публичный URL на Render
-WEBHOOK_PATH = f"/{BOT_TOKEN}/"
-WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
+WEBHOOK_PATH = f"/{8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ}/"
+WEBHOOK_URL = f"{https://ai-telegram-bot1.onrender.com}{WEBHOOK_PATH}"
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -101,10 +101,11 @@ async def start_handler(message: types.Message, state: FSMContext):
 async def on_start(request):
     return web.Response(text="Bot is running")
 
+# Исправьте обработку в on_webhook:
 async def on_webhook(request):
     json_str = await request.json()
     update = Update(**json_str)
-    await dp.process_update(update)
+    await bot.process_updates([update])  # Новый способ обработки обновлений
     return web.Response()
 
 # Устанавливаем Webhook
