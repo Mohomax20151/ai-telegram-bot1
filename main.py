@@ -1,9 +1,13 @@
 import os
 import logging
+import asyncio
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import Update, InputFile
+from aiogram.types import Update, FSInputFile
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
-from aiogram.utils import executor
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
 
 BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
@@ -11,7 +15,7 @@ ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
 
 bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
-dp = Dispatcher(bot)
+dp = Dispatcher(storage=MemoryStorage())
 
 # Webhook URL
 WEBHOOK_HOST = "https://ai-telegram-bot1.onrender.com"  # Ваш публичный URL на Render
@@ -22,8 +26,13 @@ WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Состояния (замена на старый способ с использованием обычных данных в словаре)
-user_data = {}
+# Состояния
+class UploadState(StatesGroup):
+    waiting_photo = State()
+    waiting_category = State()
+
+class IntroState(StatesGroup):
+    intro_shown = State()
 
 # Функции
 def generate_categories_keyboard(user_forecasts):
@@ -50,9 +59,9 @@ def bottom_keyboard(user_id):
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 # Обработчики команд
-@dp.message_handler(commands=["start"])
-async def start_handler(message: types.Message):
-    data = user_data.get(message.chat.id, {})
+@dp.message(Command("start"))
+async def start_handler(message: types.Message, state: FSMContext):
+    data = await state.get_data()
     if not data.get("intro_done"):
         await bot.send_chat_action(message.chat.id, action="upload_video")
         await message.answer_video(
@@ -83,12 +92,10 @@ async def start_handler(message: types.Message):
             [InlineKeyboardButton(text="🔮 AI прогнозы", callback_data="start_predictions")]
         ])
         await message.answer("Нажмите, чтобы перейти в раздел прогнозов:", reply_markup=keyboard)
-
-        # Сохраняем данные о пользователе
-        user_data[message.chat.id] = {"intro_done": True}
+        await state.update_data(intro_done=True)
         return
 
-    await full_start(message)
+    await full_start(message, state)
 
 # Основная функция обработки запроса Webhook
 async def on_start(request):
@@ -99,33 +106,25 @@ async def on_webhook(request):
         json_str = await request.json()
         update = Update(**json_str)
 
-        # Обработка обновлений
-        await dp.process_update(update)  # Используем process_update для обработки одного обновления
+        # Используем process_update для обработки обновлений
+        await dp.process_update(update)
     except Exception as e:
         logger.error(f"Ошибка при получении обновления: {e}")
     return web.Response()
 
-# Устанавливаем Webhook
+# Функция настройки Webhook
 async def set_webhook():
     webhook_info = await bot.set_webhook(WEBHOOK_URL)
     logger.info(f"Webhook set: {webhook_info}")
-
-# Функция shutdown
-async def on_shutdown(dp):
-    logging.warning('Shutting down..')
-    await bot.delete_webhook()
-    await dp.storage.close()
-    await dp.storage.wait_closed()
-    logging.warning('Bye!')
 
 # Стартуем сервер
 app = web.Application()
 app.add_routes([web.post(f"/{BOT_TOKEN}", on_webhook), web.get('/', on_start)])
 
 # Функции бота (не изменяются)
-async def full_start(message: Message):
-    data = user_data.get(message.chat.id, {})
-    user_forecasts = data.get("user_forecasts", {})
+async def full_start(message: Message, state: FSMContext):
+    data = await state.get_data()
+    user_forecasts = data.get("user_forecasts")
 
     if not user_forecasts:
         user_forecasts = {}
@@ -136,9 +135,7 @@ async def full_start(message: Message):
             except FileNotFoundError:
                 files = []
             user_forecasts[sport] = files.copy()
-
-        # Сохраняем данные пользователя
-        user_data[message.chat.id]["user_forecasts"] = user_forecasts
+        await state.update_data(user_forecasts=user_forecasts)
 
     await message.answer("Выбери категорию спорта для получения прогноза:", 
                          reply_markup=generate_categories_keyboard(user_forecasts))
@@ -158,7 +155,7 @@ if __name__ == "__main__":
     executor.start_webhook(
         dispatcher=dp,
         webhook_path=WEBHOOK_PATH,
-        on_startup=set_webhook,
+        on_startup=set_webhook,  # без передачи аргумента
         on_shutdown=on_shutdown,
         skip_updates=True,
         host=WEBHOOK_HOST,
