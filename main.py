@@ -101,12 +101,13 @@ async def start_handler(message: types.Message, state: FSMContext):
 async def on_start(request):
     return web.Response(text="Bot is running")
 
-# Исправьте обработку в on_webhook:
+# Исправленная обработка в on_webhook:
 async def on_webhook(request):
     json_str = await request.json()
     update = Update(**json_str)
-    await bot.process_updates([update])  # Новый способ обработки обновлений
+    await dp.process_update(update)  # Новый способ обработки обновлений через Dispatcher
     return web.Response()
+
 
 # Устанавливаем Webhook
 async def set_webhook():
