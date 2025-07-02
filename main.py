@@ -28,10 +28,7 @@ class Forecast(Base):
     id = Column(Integer, primary_key=True)
     sport = Column(String)
     file_id = Column(String)
-    prediction_text = Column(String)  # Добавляем поле для текста прогноза с смайлами
-    odds = Column(String)  # Коэффициент
-    match_date = Column(String)  # Дата матча
-    used = Column(Boolean, default=False)
+    used = Column(Boolean, default=False)  # Новое поле для отметки использования
 
 async def init_db():
     async with engine.begin() as conn:
@@ -48,9 +45,8 @@ bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher(storage=MemoryStorage())
 
 class UploadState(StatesGroup):
-    waiting_photo = State()  # Ожидание фото
-    waiting_category = State()  # Ожидание категории
-    waiting_forecast_text = State()  # Новое состояние для ввода текста прогноза
+    waiting_photo = State()
+    waiting_category = State()
 
 class IntroState(StatesGroup):
     intro_shown = State()
@@ -162,9 +158,7 @@ async def receive_photo(message: Message, state: FSMContext):
 
     file_id = message.photo[-1].file_id
     await state.update_data(photo_id=file_id)
-    await state.set_state(UploadState.waiting_forecast_text)  # Переход к состоянию ожидания текста
-
-    await message.answer("📝 Отправьте текст прогноза (бот добавит смайлы автоматически).")
+    await state.set_state(UploadState.waiting_category)
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -173,47 +167,6 @@ async def receive_photo(message: Message, state: FSMContext):
         ]
     )
     await message.answer("Выберите категорию для сохранения:", reply_markup=keyboard)
-    
-@dp.message(UploadState.waiting_forecast_text)
-async def receive_forecast_text(message: Message, state: FSMContext):
-    text = message.text
-
-    # Словарь для сопоставления ключевых слов и смайлов
-    emojis = {
-        "победа": "🏆",
-        "коэффициент": "📊",
-        "теннис": "🎾",
-        "футбол": "⚽",
-        "хоккей": "🏒",
-        "дота": "🎮",
-        "cs": "💣",
-    }
-
-    # Генерация текста с добавленными смайлами
-    for keyword, emoji in emojis.items():
-        if keyword.lower() in text.lower():
-            text += f" {emoji}"
-
-    # Сохраняем данные
-    data = await state.get_data()
-    file_id = data.get("photo_id")
-
-    # Сохраняем прогноз в базе данных
-    async with SessionLocal() as session:
-        forecast = Forecast(
-            sport="unknown",  # Тут можно настраивать, чтобы определять спорт автоматически
-            file_id=file_id,
-            prediction_text=text,  # Текст с добавленными смайлами
-            odds="1.5",  # Пример коэффициента, это можно добавить через админку
-            match_date="2025-07-02",  # Пример даты матча, можно тоже добавить вручную
-            used=False,
-        )
-        session.add(forecast)
-        await session.commit()
-
-    # Подтверждение успешного сохранения
-    await message.answer(f"✅ Прогноз сохранён:\n\n{text}")
-    await state.clear()
 
 @dp.callback_query(lambda c: c.data.startswith("save_to_"))
 async def save_forecast(callback: CallbackQuery, state: FSMContext):
