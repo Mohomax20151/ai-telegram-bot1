@@ -1,24 +1,27 @@
 import os
 import logging
-import asyncio
 from aiogram import Bot, Dispatcher
-from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup, DefaultBotProperties
+from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
 
+# Токен бота и другие данные
 BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
 ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
 
-# Используем DefaultBotProperties для передачи параметров
-bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
-dp = Dispatcher(storage=MemoryStorage())  # Настроение диспетчера
+# Настройка бота
+bot = Bot(token=BOT_TOKEN)
+bot.set_default(parse_mode="HTML")  # Устанавливаем parse_mode через set_default
+
+# Создание диспетчера
+dp = Dispatcher(storage=MemoryStorage())  # Диспетчер с памятью
 
 # Webhook URL
-WEBHOOK_HOST = "https://ai-telegram-bot1.onrender.com"  # Ваш публичный URL на Render
+WEBHOOK_HOST = "https://ai-telegram-bot1.onrender.com"
 WEBHOOK_PATH = f"/{BOT_TOKEN}"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
@@ -34,7 +37,7 @@ class UploadState(StatesGroup):
 class IntroState(StatesGroup):
     intro_shown = State()
 
-# Функции
+# Функции для работы с клавиатурами
 def generate_categories_keyboard(user_forecasts):
     keyboard = []
     for sport in CATEGORIES:
