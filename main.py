@@ -9,10 +9,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
-from aiogram.utils.exceptions import TelegramAPIError, MessageNotModified
-import time
 
-# Настройки бота
 BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
 ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
@@ -108,25 +105,12 @@ async def on_webhook(request):
     try:
         json_str = await request.json()
         update = Update(**json_str)
-        await process_update_safely(update)
+
+        # Используем process_update для обработки обновлений
+        await dp.process_update(update)  # Используем process_update для обработки одного обновления
     except Exception as e:
         logger.error(f"Ошибка при получении обновления: {e}")
     return web.Response()
-
-# Используем безопасную обработку обновлений с повторной попыткой
-async def process_update_safely(update: Update, retries=3, delay=2):
-    for attempt in range(retries):
-        try:
-            await dp.process_update(update)
-            break
-        except Exception as e:
-            logger.error(f"Ошибка обработки обновления: {e}, попытка {attempt+1}/{retries}")
-            if attempt + 1 < retries:
-                await asyncio.sleep(delay)
-            else:
-                logger.error(f"Не удалось обработать обновление после {retries} попыток.")
-                # Если ошибка сохраняется, можно отправить уведомление или предпринять другие действия
-                break
 
 # Устанавливаем Webhook
 async def set_webhook():
