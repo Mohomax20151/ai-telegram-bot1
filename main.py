@@ -1,7 +1,7 @@
 import os
 import logging
 import asyncio
-from aiogram import Bot, Dispatcher, types, executor
+from aiogram import Bot, Dispatcher, types
 from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -14,7 +14,7 @@ ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
 
 bot = Bot(token=BOT_TOKEN, parse_mode="HTML")  # Убираем ParseMode и используем строку
-dp = Dispatcher(storage=MemoryStorage())
+dp = Dispatcher(storage=MemoryStorage())  # Настроение диспетчера
 
 # Webhook URL
 WEBHOOK_HOST = "https://ai-telegram-bot1.onrender.com"  # Ваш публичный URL на Render
@@ -150,6 +150,4 @@ async def main():
     web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
 if __name__ == "__main__":
-    # Убираем использование asyncio.run()
-    # Платформа уже запускает главный цикл, поэтому избегаем использования asyncio.run
-    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    main()
