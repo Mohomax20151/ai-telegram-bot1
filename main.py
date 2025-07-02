@@ -110,6 +110,14 @@ async def set_webhook():
     webhook_info = await bot.set_webhook(WEBHOOK_URL)
     logger.info(f"Webhook set: {webhook_info}")
 
+# Функция shutdown
+async def on_shutdown(dp):
+    logging.warning('Shutting down..')
+    await bot.delete_webhook()
+    await dp.storage.close()
+    await dp.storage.wait_closed()
+    logging.warning('Bye!')
+
 # Стартуем сервер
 app = web.Application()
 app.add_routes([web.post(f"/{BOT_TOKEN}", on_webhook), web.get('/', on_start)])
