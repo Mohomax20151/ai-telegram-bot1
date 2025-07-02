@@ -19,7 +19,7 @@ dp = Dispatcher(storage=MemoryStorage())
 
 # Webhook URL
 WEBHOOK_HOST = "https://ai-telegram-bot1.onrender.com"  # Ваш публичный URL на Render
-WEBHOOK_PATH = f"/{BOT_TOKEN}/"
+WEBHOOK_PATH = f"/{BOT_TOKEN}"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
 # Настройка логирования
@@ -115,7 +115,7 @@ async def set_webhook():
 
 # Стартуем сервер
 app = web.Application()
-app.add_routes([web.post(f"/{BOT_TOKEN}/", on_webhook), web.get('/', on_start)])
+app.add_routes([web.post(f"/{BOT_TOKEN}", on_webhook), web.get('/', on_start)])
 
 # Функции бота (не изменяются)
 async def full_start(message: Message, state: FSMContext):
