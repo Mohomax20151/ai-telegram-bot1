@@ -101,11 +101,10 @@ async def start_handler(message: types.Message, state: FSMContext):
 async def on_start(request):
     return web.Response(text="Bot is running")
 
-# Исправленная обработка в on_webhook:
 async def on_webhook(request):
     json_str = await request.json()
     update = Update(**json_str)
-    await dp.feed_update(update)  # Используем feed_update для aiogram 3.x
+    await dp.process_update(update)  # Используем process_update, а не feed_update
     return web.Response()
 
 # Устанавливаем Webhook
