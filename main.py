@@ -1,7 +1,7 @@
 import os
 import logging
 import asyncio
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher
 from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -103,10 +103,10 @@ async def on_start(request):
 async def on_webhook(request):
     try:
         json_str = await request.json()
-        update = Update(**json_str)
-
-        # Используем process_update для обработки обновлений
-        await dp.process_update(update)  # Используем process_update для обработки одного обновления
+        update = Update.model_validate(json_str)  # Используется метод model_validate()
+        
+        # Обрабатываем обновление с помощью feed_update()
+        await dp.feed_update(update)  # Заменено на feed_update()
     except Exception as e:
         logger.error(f"Ошибка при получении обновления: {e}")
     return web.Response()
