@@ -2,13 +2,17 @@ import os
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import Update, Message, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import Update, FSInputFile
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
+from aiogram.utils.exceptions import TelegramAPIError, MessageNotModified
+import time
 
+# Настройки бота
 BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
 ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
@@ -59,7 +63,7 @@ def bottom_keyboard(user_id):
 
 # Обработчики команд
 @dp.message(Command("start"))
-async def start_handler(message: Message, state: FSMContext):
+async def start_handler(message: types.Message, state: FSMContext):
     data = await state.get_data()
     if not data.get("intro_done"):
         await bot.send_chat_action(message.chat.id, action="upload_video")
@@ -101,10 +105,28 @@ async def on_start(request):
     return web.Response(text="Bot is running")
 
 async def on_webhook(request):
-    json_str = await request.json()
-    update = Update(**json_str)
-    await dp.process_update([update])  # Используем process_updates для обработки обновлений
+    try:
+        json_str = await request.json()
+        update = Update(**json_str)
+        await process_update_safely(update)
+    except Exception as e:
+        logger.error(f"Ошибка при получении обновления: {e}")
     return web.Response()
+
+# Используем безопасную обработку обновлений с повторной попыткой
+async def process_update_safely(update: Update, retries=3, delay=2):
+    for attempt in range(retries):
+        try:
+            await dp.process_update(update)
+            break
+        except Exception as e:
+            logger.error(f"Ошибка обработки обновления: {e}, попытка {attempt+1}/{retries}")
+            if attempt + 1 < retries:
+                await asyncio.sleep(delay)
+            else:
+                logger.error(f"Не удалось обработать обновление после {retries} попыток.")
+                # Если ошибка сохраняется, можно отправить уведомление или предпринять другие действия
+                break
 
 # Устанавливаем Webhook
 async def set_webhook():
