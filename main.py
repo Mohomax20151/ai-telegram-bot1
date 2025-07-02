@@ -1,18 +1,18 @@
 import os
 import logging
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import Update, FSInputFile
-from aiohttp import web
-from aiogram.utils.executor import start_webhook
+import asyncio
+from aiogram import Bot, Dispatcher, types, executor
+from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
+from aiohttp import web
 
 BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
 ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
 
-# Настройка бота
 bot = Bot(token=BOT_TOKEN, parse_mode="HTML")  # Убираем ParseMode и используем строку
 dp = Dispatcher(storage=MemoryStorage())
 
@@ -106,7 +106,7 @@ async def on_webhook(request):
         update = Update(**json_str)
 
         # Используем process_update для обработки обновлений
-        await dp.process_update(update)  # Новый метод для Aiogram 3.x
+        await dp.process_update(update)  # Используем process_update для обработки одного обновления
     except Exception as e:
         logger.error(f"Ошибка при получении обновления: {e}")
     return web.Response()
@@ -116,13 +116,7 @@ async def set_webhook():
     webhook_info = await bot.set_webhook(WEBHOOK_URL)
     logger.info(f"Webhook set: {webhook_info}")
 
-async def on_startup(dp):
-    await set_webhook()
-
-async def on_shutdown(dp):
-    logging.warning('Shutting down...')
-    await bot.delete_webhook()
-
+# Стартуем сервер
 app = web.Application()
 app.add_routes([web.post(f"/{BOT_TOKEN}", on_webhook), web.get('/', on_start)])
 
@@ -156,5 +150,6 @@ async def main():
     web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
 if __name__ == "__main__":
+    # Убираем использование asyncio.run()
     # Платформа уже запускает главный цикл, поэтому избегаем использования asyncio.run
     web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
