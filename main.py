@@ -1,20 +1,17 @@
 import os
 import logging
-import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Update, InputFile
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.fsm.state import State, StatesGroup
+from aiogram.utils import executor
 from aiohttp import web
 
 BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
 ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
 
-bot = Bot(token=BOT_TOKEN, parse_mode="HTML")  # Убираем ParseMode и используем строку
-dp = Dispatcher(storage=MemoryStorage())
+bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
+dp = Dispatcher(bot)
 
 # Webhook URL
 WEBHOOK_HOST = "https://ai-telegram-bot1.onrender.com"  # Ваш публичный URL на Render
@@ -25,13 +22,8 @@ WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Состояния
-class UploadState(StatesGroup):
-    waiting_photo = State()
-    waiting_category = State()
-
-class IntroState(StatesGroup):
-    intro_shown = State()
+# Состояния (замена на старый способ с использованием обычных данных в словаре)
+user_data = {}
 
 # Функции
 def generate_categories_keyboard(user_forecasts):
@@ -59,8 +51,8 @@ def bottom_keyboard(user_id):
 
 # Обработчики команд
 @dp.message_handler(commands=["start"])
-async def start_handler(message: types.Message, state: FSMContext):
-    data = await state.get_data()
+async def start_handler(message: types.Message):
+    data = user_data.get(message.chat.id, {})
     if not data.get("intro_done"):
         await bot.send_chat_action(message.chat.id, action="upload_video")
         await message.answer_video(
@@ -91,10 +83,12 @@ async def start_handler(message: types.Message, state: FSMContext):
             [InlineKeyboardButton(text="🔮 AI прогнозы", callback_data="start_predictions")]
         ])
         await message.answer("Нажмите, чтобы перейти в раздел прогнозов:", reply_markup=keyboard)
-        await state.update_data(intro_done=True)
+
+        # Сохраняем данные о пользователе
+        user_data[message.chat.id] = {"intro_done": True}
         return
 
-    await full_start(message, state)
+    await full_start(message)
 
 # Основная функция обработки запроса Webhook
 async def on_start(request):
@@ -105,7 +99,7 @@ async def on_webhook(request):
         json_str = await request.json()
         update = Update(**json_str)
 
-        # Используем process_update для обработки обновлений
+        # Обработка обновлений
         await dp.process_update(update)  # Используем process_update для обработки одного обновления
     except Exception as e:
         logger.error(f"Ошибка при получении обновления: {e}")
@@ -121,9 +115,9 @@ app = web.Application()
 app.add_routes([web.post(f"/{BOT_TOKEN}", on_webhook), web.get('/', on_start)])
 
 # Функции бота (не изменяются)
-async def full_start(message: Message, state: FSMContext):
-    data = await state.get_data()
-    user_forecasts = data.get("user_forecasts")
+async def full_start(message: Message):
+    data = user_data.get(message.chat.id, {})
+    user_forecasts = data.get("user_forecasts", {})
 
     if not user_forecasts:
         user_forecasts = {}
@@ -134,7 +128,9 @@ async def full_start(message: Message, state: FSMContext):
             except FileNotFoundError:
                 files = []
             user_forecasts[sport] = files.copy()
-        await state.update_data(user_forecasts=user_forecasts)
+
+        # Сохраняем данные пользователя
+        user_data[message.chat.id]["user_forecasts"] = user_forecasts
 
     await message.answer("Выбери категорию спорта для получения прогноза:", 
                          reply_markup=generate_categories_keyboard(user_forecasts))
@@ -150,6 +146,13 @@ async def main():
     web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
 if __name__ == "__main__":
-    # Убираем использование asyncio.run()
-    # Платформа уже запускает главный цикл, поэтому избегаем использования asyncio.run
-    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    # Запуск главного цикла
+    executor.start_webhook(
+        dispatcher=dp,
+        webhook_path=WEBHOOK_PATH,
+        on_startup=set_webhook,
+        on_shutdown=on_shutdown,
+        skip_updates=True,
+        host=WEBHOOK_HOST,
+        port=int(os.environ.get("PORT", 10000))
+    )
