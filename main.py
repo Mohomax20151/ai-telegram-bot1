@@ -21,6 +21,7 @@ dp = Dispatcher(storage=MemoryStorage())
 class UploadState(StatesGroup):
     waiting_photo = State()
     waiting_category = State()
+    waiting_forecast_text = State()  # Новое состояние для текста прогноза
 
 class IntroState(StatesGroup):
     intro_shown = State()
@@ -37,13 +38,15 @@ def generate_categories_keyboard(user_forecasts):
 def admin_menu_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📤 Загрузить прогноз", callback_data="admin_upload")],
+        [InlineKeyboardButton(text="📤 Загрузить текстом", callback_data="admin_upload_text")],  # Новая кнопка
         [InlineKeyboardButton(text="📊 Просмотр прогнозов", callback_data="admin_view")],
         [InlineKeyboardButton(text="🗑 Очистить прогнозы", callback_data="admin_clear")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_start")]
     ])
 
 def bottom_keyboard(user_id):
-    buttons = [[KeyboardButton(text="🔮 AI прогнозы")]]
+    buttons = [[KeyboardButton(text="🔮 AI прогнозы")], 
+               [KeyboardButton(text="📄 Показать прогнозы текстом")]]  # Новая кнопка
     if user_id == ADMIN_ID:
         buttons.append([KeyboardButton(text="Админ")])
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
@@ -79,7 +82,7 @@ async def start_handler(message: types.Message, state: FSMContext):
             "🧩 Расширение функционала внутри бота"
         )
 
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[ 
             [InlineKeyboardButton(text="🔮 AI прогнозы", callback_data="start_predictions")]
         ])
         await message.answer("Нажмите, чтобы перейти в раздел прогнозов:", reply_markup=keyboard)
@@ -116,6 +119,31 @@ async def full_start(message: Message, state: FSMContext):
 async def bottom_start(message: Message, state: FSMContext):
     await full_start(message, state)
 
+@dp.message(lambda m: m.text == "📄 Показать прогнозы текстом")
+async def show_text_forecasts(message: Message, state: FSMContext):
+    # Извлекаем все текстовые прогнозы из базы данных
+    user_forecasts = {}
+    async with SessionLocal() as session:
+        for sport in CATEGORIES:
+            result = await session.execute(
+                Forecast.__table__.select().where(
+                    (Forecast.sport == sport) & (Forecast.used == False)
+                )
+            )
+            rows = result.fetchall()
+            user_forecasts[sport] = [row.prediction_text for row in rows]  # Получаем только текст
+
+    # Формируем строку с прогнозами
+    forecast_text = ""
+    for sport, forecasts in user_forecasts.items():
+        forecast_text += f"{sport.capitalize()}:\n" + "\n".join(forecasts) + "\n\n"
+
+    if not forecast_text:
+        forecast_text = "❗ Прогнозы отсутствуют."
+
+    # Отправляем прогнозы пользователю
+    await message.answer(f"📋 Актуальные прогнозы:\n\n{forecast_text}")
+
 @dp.message(lambda m: m.text == "Админ")
 async def bottom_admin(message: Message):
     if message.from_user.id == ADMIN_ID:
@@ -126,40 +154,31 @@ async def admin_upload(callback: CallbackQuery, state: FSMContext):
     await state.set_state(UploadState.waiting_photo)
     await callback.message.answer("📸 Отправьте прогноз в виде фото")
 
-@dp.message(UploadState.waiting_photo)
-async def receive_photo(message: Message, state: FSMContext):
-    if not message.photo:
-        await message.answer("❗ Пожалуйста, отправьте именно фото.")
-        return
+@dp.callback_query(lambda c: c.data == "admin_upload_text")
+async def admin_upload_text(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(UploadState.waiting_forecast_text)
+    await callback.message.answer("📄 Пожалуйста, отправьте прогноз в текстовом формате (с смайлами).")
+    
+    # После этого возвращаем админскую панель
+    await callback.message.edit_reply_markup(reply_markup=admin_menu_keyboard())
 
-    file_id = message.photo[-1].file_id
-    await state.update_data(photo_id=file_id)
-    await state.set_state(UploadState.waiting_category)
+@dp.message(UploadState.waiting_forecast_text)
+async def receive_forecast_text(message: Message, state: FSMContext):
+    text = message.text
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=sport.capitalize(), callback_data=f"save_to_{sport}")]
-            for sport in CATEGORIES
-        ]
-    )
-    await message.answer("Выберите категорию для сохранения:", reply_markup=keyboard)
+    # Сохраняем текстовый прогноз в базе данных
+    async with SessionLocal() as session:
+        for sport in CATEGORIES:
+            forecast = Forecast(sport=sport, prediction_text=text, used=False)
+            session.add(forecast)
+        await session.commit()
 
-@dp.callback_query(lambda c: c.data.startswith("save_to_"))
-async def save_forecast(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    photo_id = data.get("photo_id")
-    sport = callback.data.replace("save_to_", "")
-
-    folder = f"forecasts/{sport}"
-    os.makedirs(folder, exist_ok=True)
-    files = os.listdir(folder)
-    file_name = f"{len(files) + 1}.jpg"
-
-    file = await bot.get_file(photo_id)
-    file_path = file.file_path
-    await bot.download_file(file_path, os.path.join(folder, file_name))
-
-    await callback.message.answer(f"✅ Прогноз сохранён в категорию {sport.capitalize()}")
+    await message.answer(f"✅ Прогноз текстом сохранён:\n\n{text}")
+    
+    # Вернем админа в меню после того, как текст сохранен
+    await message.answer("🔧 Вы вернулись в админ-панель.", reply_markup=admin_menu_keyboard())
+    
+    # Очистим состояние
     await state.clear()
 
 @dp.callback_query(lambda c: c.data == "admin_view")
