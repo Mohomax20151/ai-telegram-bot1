@@ -10,6 +10,9 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy import Column, Integer, String, Boolean
 
 BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
 ADMIN_ID = 6688088575
@@ -21,11 +24,12 @@ dp = Dispatcher(storage=MemoryStorage())
 class UploadState(StatesGroup):
     waiting_photo = State()
     waiting_category = State()
-    waiting_forecast_text = State()  # Новое состояние для текста прогноза
+    waiting_forecast_text = State()
 
 class IntroState(StatesGroup):
     intro_shown = State()
 
+# Добавляем обработку фотографий и текстовых прогнозов
 def generate_categories_keyboard(user_forecasts):
     keyboard = []
     for sport in CATEGORIES:
@@ -38,7 +42,7 @@ def generate_categories_keyboard(user_forecasts):
 def admin_menu_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📤 Загрузить прогноз", callback_data="admin_upload")],
-        [InlineKeyboardButton(text="📤 Загрузить текстом", callback_data="admin_upload_text")],  # Новая кнопка
+        [InlineKeyboardButton(text="📤 Загрузить текстом", callback_data="admin_upload_text")],
         [InlineKeyboardButton(text="📊 Просмотр прогнозов", callback_data="admin_view")],
         [InlineKeyboardButton(text="🗑 Очистить прогнозы", callback_data="admin_clear")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_start")]
@@ -46,7 +50,7 @@ def admin_menu_keyboard():
 
 def bottom_keyboard(user_id):
     buttons = [[KeyboardButton(text="🔮 AI прогнозы")], 
-               [KeyboardButton(text="📄 Показать прогнозы текстом")]]  # Новая кнопка
+               [KeyboardButton(text="📄 Показать прогнозы текстом")]]
     if user_id == ADMIN_ID:
         buttons.append([KeyboardButton(text="Админ")])
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
@@ -69,13 +73,11 @@ async def start_handler(message: types.Message, state: FSMContext):
             "💡 <b>В прошлом уже был успешный проект с AI-вилками</b>, но он был закрыт\n"
             "🔐 <b>Количество участников</b> в будущем будет ограничено для стабильности\n"
             "📉 <b>Прибыль сейчас</b> — стабильная, цель: рост процента побед\n\n"
-
             "<b>⚙️ Что происходит сейчас:</b>\n"
             "🤖 AI:\n"
             "— 📚 Сканирует сотни источников\n"
             "— 📊 Анализирует тренды, коэффициенты\n"
             "— 🧠 Использует нейросети для value-прогнозов\n\n"
-
             "<b>🚀 Что планируется в будущем:</b>\n"
             "📈 Повышение точности\n"
             "📊 Интерактивная аналитика\n"
@@ -195,11 +197,18 @@ async def view_forecasts(callback: CallbackQuery):
 
 @dp.callback_query(lambda c: c.data == "admin_clear")
 async def clear_forecasts(callback: CallbackQuery):
+    # Очистим файлы прогнозов с диска
     for sport in CATEGORIES:
         folder = f"forecasts/{sport}"
         if os.path.exists(folder):
             for f in os.listdir(folder):
                 os.remove(os.path.join(folder, f))
+    
+    # Очистим прогнозы в базе данных
+    async with SessionLocal() as session:
+        await session.execute(Forecast.__table__.delete())
+        await session.commit()
+
     await callback.message.answer("🗑 Все прогнозы очищены.")
 
 @dp.callback_query(lambda c: c.data == "back_to_start")
