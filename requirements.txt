@@ -1,4 +1,4 @@
 aiogram==2.25
 aiohttp==3.8.6
-SQLAlchemy==2.0.30
-asyncpg==0.29.0
+SQLAlchemy==1.4.27
+asyncpg==0.24.0
