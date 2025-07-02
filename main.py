@@ -230,4 +230,6 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+    port = int(os.environ.get('PORT', 10000))  # 10000 — это порт по умолчанию
+    executor.start_polling(dp, skip_updates=True)
     asyncio.run(main())
