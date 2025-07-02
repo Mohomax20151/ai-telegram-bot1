@@ -11,32 +11,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
-from sqlalchemy import Column, Integer, String, Boolean
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-engine = create_async_engine(DATABASE_URL, echo=False)
-SessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-class Base(DeclarativeBase):
-    pass
-
-class Forecast(Base):
-    __tablename__ = "forecasts"
-    id = Column(Integer, primary_key=True)
-    sport = Column(String)
-    file_id = Column(String)
-    used = Column(Boolean, default=False)  # Новое поле для отметки использования
-
-async def init_db():
-    async with engine.begin() as conn:
-        # Удаляем таблицы (если есть), чтобы применить новую схему
-        await conn.run_sync(Base.metadata.drop_all)
-        # Создаем таблицы заново
-        await conn.run_sync(Base.metadata.create_all)
-
 BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
 ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
@@ -120,18 +94,20 @@ async def handle_intro_button(callback: CallbackQuery, state: FSMContext):
     await full_start(callback.message, state)
 
 async def full_start(message: Message, state: FSMContext):
-    user_forecasts = {}
-    async with SessionLocal() as session:
-        for sport in CATEGORIES:
-            result = await session.execute(
-                Forecast.__table__.select().where(
-                    (Forecast.sport == sport) & (Forecast.used == False)
-                )
-            )
-            rows = result.fetchall()
-            user_forecasts[sport] = [row.file_id for row in rows]
+    data = await state.get_data()
+    user_forecasts = data.get("user_forecasts")
 
-    await state.update_data(user_forecasts=user_forecasts)
+    if not user_forecasts:
+        user_forecasts = {}
+        for sport in CATEGORIES:
+            folder = f"forecasts/{sport}"
+            try:
+                files = [f for f in os.listdir(folder) if f.lower().endswith((".png", ".jpg", ".jpeg"))]
+            except FileNotFoundError:
+                files = []
+            user_forecasts[sport] = files.copy()
+        await state.update_data(user_forecasts=user_forecasts)
+
     await message.answer("Выбери категорию спорта для получения прогноза:",
                          reply_markup=generate_categories_keyboard(user_forecasts))
     await message.answer("🦅", reply_markup=bottom_keyboard(message.from_user.id))
@@ -174,10 +150,14 @@ async def save_forecast(callback: CallbackQuery, state: FSMContext):
     photo_id = data.get("photo_id")
     sport = callback.data.replace("save_to_", "")
 
-    async with SessionLocal() as session:
-        forecast = Forecast(sport=sport, file_id=photo_id, used=False)
-        session.add(forecast)
-        await session.commit()
+    folder = f"forecasts/{sport}"
+    os.makedirs(folder, exist_ok=True)
+    files = os.listdir(folder)
+    file_name = f"{len(files) + 1}.jpg"
+
+    file = await bot.get_file(photo_id)
+    file_path = file.file_path
+    await bot.download_file(file_path, os.path.join(folder, file_name))
 
     await callback.message.answer(f"✅ Прогноз сохранён в категорию {sport.capitalize()}")
     await state.clear()
@@ -185,20 +165,22 @@ async def save_forecast(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data == "admin_view")
 async def view_forecasts(callback: CallbackQuery):
     report = ""
-    async with SessionLocal() as session:
-        for sport in CATEGORIES:
-            result = await session.execute(
-                Forecast.__table__.select().where(Forecast.sport == sport)
-            )
-            count = len(result.fetchall())
-            report += f"{sport.capitalize()}: {count} шт.\n"
+    for sport in CATEGORIES:
+        folder = f"forecasts/{sport}"
+        try:
+            count = len([f for f in os.listdir(folder) if f.lower().endswith((".png", ".jpg", ".jpeg"))])
+        except FileNotFoundError:
+            count = 0
+        report += f"{sport.capitalize()}: {count} шт.\n"
     await callback.message.answer(f"📊 Статистика прогнозов:\n\n{report}")
 
 @dp.callback_query(lambda c: c.data == "admin_clear")
 async def clear_forecasts(callback: CallbackQuery):
-    async with SessionLocal() as session:
-        await session.execute(Forecast.__table__.delete())
-        await session.commit()
+    for sport in CATEGORIES:
+        folder = f"forecasts/{sport}"
+        if os.path.exists(folder):
+            for f in os.listdir(folder):
+                os.remove(os.path.join(folder, f))
     await callback.message.answer("🗑 Все прогнозы очищены.")
 
 @dp.callback_query(lambda c: c.data == "back_to_start")
@@ -220,25 +202,12 @@ async def process_payment_choice(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Прогнозы закончились 😞", show_alert=True)
         return
 
-    file_id = files.pop(0)
+    file_name = files.pop(0)
+    file_path = os.path.join(f"forecasts/{sport}", file_name)
+    photo = FSInputFile(file_path)
 
-    # Отмечаем прогноз как использованный в базе
-    async with SessionLocal() as session:
-        forecast = await session.execute(
-            Forecast.__table__.select().where(
-                (Forecast.sport == sport) & (Forecast.file_id == file_id) & (Forecast.used == False)
-            )
-        )
-        forecast_row = forecast.fetchone()
-        if forecast_row:
-            await session.execute(
-                Forecast.__table__.update()
-                .where(Forecast.id == forecast_row.id)
-                .values(used=True)
-            )
-            await session.commit()
-
-    await callback.message.answer_photo(file_id, caption=f"{sport.capitalize()}")
+    emoji = "⚽️" if sport == "football" else "🏒" if sport == "hockey" else "🎮"
+    await callback.message.answer_photo(photo, caption=f"{sport.capitalize()} {emoji}")
 
     user_forecasts[sport] = files
     await state.update_data(user_forecasts=user_forecasts)
@@ -256,7 +225,6 @@ async def get_video_file_id(message: Message):
 
 async def main():
     print("🤖 Бот запущен.")
-    await init_db()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
