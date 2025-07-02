@@ -2,10 +2,9 @@ import os
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import Update, FSInputFile
+from aiogram.types import Update, InputFile  # Изменено с FSInputFile на InputFile
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.filters import Command
-from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
@@ -16,7 +15,7 @@ ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
 
 bot = Bot(token=BOT_TOKEN, parse_mode="HTML")  # Убираем ParseMode и используем строку
-dp = Dispatcher(bot, storage=MemoryStorage())
+dp = Dispatcher(storage=MemoryStorage())
 
 # Webhook URL
 WEBHOOK_HOST = "https://ai-telegram-bot1.onrender.com"  # Ваш публичный URL на Render
@@ -60,13 +59,13 @@ def bottom_keyboard(user_id):
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 # Обработчики команд
-@dp.message_handler(Command("start"))
+@dp.message(Command("start"))
 async def start_handler(message: types.Message, state: FSMContext):
     data = await state.get_data()
     if not data.get("intro_done"):
         await bot.send_chat_action(message.chat.id, action="upload_video")
         await message.answer_video(
-            video="BAACAgIAAxkBAAIBCGhdn70oSM1KnFvcGOvOjuQ50P2TAAJ4gAACKGXwSjSGuqbploX4NgQ",
+            InputFile("path_to_video"),  # Используем InputFile
             caption=( 
                 "🎥 <b>По тенденции развития проекта</b>, в будущем будет выпущено качественное <b>реалистичное видео от AI</b>\n"
                 "📊 <b>На момент создания:</b> 71% побед, средний кэф — 1.78\n"
