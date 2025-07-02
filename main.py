@@ -103,7 +103,7 @@ async def on_start(request):
 async def on_webhook(request):
     json_str = await request.json()
     update = Update(**json_str)
-    await dp.process_updates([update])  # Используем process_updates для обработки обновлений
+    await dp.process_update([update])  # Используем process_updates для обработки обновлений
     return web.Response()
 
 # Устанавливаем Webhook
