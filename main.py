@@ -105,7 +105,7 @@ async def on_start(request):
 async def on_webhook(request):
     json_str = await request.json()
     update = Update(**json_str)
-    await dp.update_handlers(update)  # Новый способ обработки обновлений через Dispatcher
+    await dp.feed_update(update)  # Используем feed_update для aiogram 3.x
     return web.Response()
 
 # Устанавливаем Webhook
