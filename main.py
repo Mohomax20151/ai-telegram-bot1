@@ -181,8 +181,12 @@ async def admin_upload(callback: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "admin_upload_text")
 async def admin_upload_text(callback: CallbackQuery, state: FSMContext):
+    # Убираем проверку на наличие прогнозов, так как админ должен просто отправить текст
     await state.set_state(UploadState.waiting_forecast_text)  # Новый статус для ожидания текста
     await callback.message.answer("📄 Пожалуйста, отправьте прогноз в текстовом формате (с смайлами).")
+    
+    # После этого возвращаем админскую панель
+    await callback.message.edit_reply_markup(reply_markup=admin_menu_keyboard())
 
 @dp.message(UploadState.waiting_forecast_text)
 async def receive_forecast_text(message: Message, state: FSMContext):
@@ -196,6 +200,11 @@ async def receive_forecast_text(message: Message, state: FSMContext):
         await session.commit()
 
     await message.answer(f"✅ Прогноз текстом сохранён:\n\n{text}")
+    
+    # Вернем админа в меню после того, как текст сохранен
+    await message.answer("🔧 Вы вернулись в админ-панель.", reply_markup=admin_menu_keyboard())
+    
+    # Очистим состояние
     await state.clear()
 
 @dp.callback_query(lambda c: c.data == "admin_view")
