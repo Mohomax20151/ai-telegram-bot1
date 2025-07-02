@@ -149,5 +149,10 @@ async def main():
     # Запускаем aiohttp сервер на Render
     web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
+# Обертка для запуска главной функции
+async def start():
+    await main()
+
 if __name__ == "__main__":
-    main()
+    # Вызовем start(), так как она асинхронная
+    asyncio.run(start())
