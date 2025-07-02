@@ -2,8 +2,7 @@ import os
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import Update, FSInputFile
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -104,7 +103,7 @@ async def on_start(request):
 async def on_webhook(request):
     json_str = await request.json()
     update = Update(**json_str)
-    await dp.process_update(update)  # Используем process_update, а не feed_update
+    await dp.process_updates([update])  # Используем process_updates для обработки обновлений
     return web.Response()
 
 # Устанавливаем Webhook
