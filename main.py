@@ -240,20 +240,24 @@ async def buy_handler(callback: CallbackQuery, state: FSMContext):
     if not files:
         await callback.answer("Прогнозов в этой категории нет 😞", show_alert=True)
         return
+
+    # Отправляем фотографию прогноза
     file_name = files.pop(0)
     path = os.path.join(f"forecasts/{sport}", file_name)
     photo = FSInputFile(path)
     emojis = {"football":"⚽️","hockey":"🏒","dota":"🎮","cs":"🔫","tennis":"🎾"}
     caption = f"{sport.capitalize()} {emojis.get(sport,'')}"
     await callback.message.answer_photo(photo, caption=caption)
+
+    # Обновляем state
     user_forecasts[sport] = files
     await state.update_data(user_forecasts=user_forecasts)
-    try:
-        await callback.message.edit_reply_markup(
-            generate_categories_keyboard(user_forecasts)
-        )
-    except:
-        pass
+
+    # Сразу редактируем кнопки с актуальным числом прогнозов
+    await callback.message.edit_reply_markup(
+        reply_markup=generate_categories_keyboard(user_forecasts)
+    )
+
     await callback.answer()
 
 # ——— Fallback ———
