@@ -50,11 +50,19 @@ class UploadState(StatesGroup):
 
 # ——— Клавиатуры ———
 def generate_categories_keyboard(user_forecasts: dict) -> InlineKeyboardMarkup:
+    emoji_map = {
+        'football': '⚽️',
+        'hockey'  : '🏒',
+        'dota'    : '🎮',
+        'cs'      : '🔫',
+        'tennis'  : '🎾',
+    }
     kb = []
     for sport in CATEGORIES:
         count = len(user_forecasts.get(sport, []))
         cb = f"buy_{sport}" if count else "none"
-        kb.append([{"text": f"{sport.capitalize()} — {count}", "callback_data": cb}])
+        label = f"{emoji_map[sport]} {sport.capitalize()} — {count}"
+        kb.append([{"text": label, "callback_data": cb}])
     return InlineKeyboardMarkup.model_validate({"inline_keyboard": kb})
 
 def admin_menu_keyboard() -> InlineKeyboardMarkup:
