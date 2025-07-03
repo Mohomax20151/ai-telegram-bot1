@@ -230,16 +230,16 @@ async def general_handler(message: Message):
 async def on_start(request):
     return web.Response(text="Bot is running")
 
+# ——— Webhook handler ———
 async def on_webhook(request):
     try:
-        # 1. Получаем сырые данные из POST
+        # 1. Получаем "сырые" данные JSON от Telegram
         data = await request.json()
-        # 2. Создаём объект Update напрямую
-        update = Update(**data)
-        # 3. Передаём update диспетчеру вместе с bot
-        await dp.feed_update(bot, update)
+        # 2. Передаём их в диспетчер минуя Pydantic, чтобы избежать BaseModel.__init__() ошибок
+        await dp.feed_raw_update(bot, data)
     except Exception as e:
         logger.error(f"Webhook handling error: {e}")
+    # 3. Отвечаем Telegram, что всё принято
     return web.Response()
 
 async def on_app_startup(app):
