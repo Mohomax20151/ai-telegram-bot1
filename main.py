@@ -2,7 +2,10 @@ import os
 import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message, KeyboardButton, ReplyKeyboardMarkup, CallbackQuery
+from aiogram.types import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup,
+    Message, KeyboardButton, ReplyKeyboardMarkup, CallbackQuery, ContentType
+)
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -10,25 +13,21 @@ from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
 
 # ——— Конфигурация ———
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "6688088575"))
-CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
-
-WEBHOOK_HOST = os.getenv("WEBHOOK_HOST", "https://ai-telegram-bot1.onrender.com")
-WEBHOOK_PATH = f"/{BOT_TOKEN}"
-WEBHOOK_URL  = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-PORT = int(os.getenv("PORT", "10000"))
+BOT_TOKEN   = os.getenv("BOT_TOKEN", "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ")
+ADMIN_ID    = int(os.getenv("ADMIN_ID", "6688088575"))
+CATEGORIES  = ['football', 'hockey', 'dota', 'cs', 'tennis']
+WEBHOOK_HOST= os.getenv("WEBHOOK_HOST", "https://ai-telegram-bot1.onrender.com")
+WEBHOOK_PATH= f"/{BOT_TOKEN}"
+WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
+PORT        = int(os.getenv("PORT", "10000"))
 
 # ——— Логирование ———
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ——— Инициализация бота и диспетчера ———
-bot = Bot(
-    token=BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode="HTML")
-)
-dp = Dispatcher(storage=MemoryStorage())
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+dp  = Dispatcher(storage=MemoryStorage())
 
 # ——— FSM-состояния ———
 class UploadState(StatesGroup):
@@ -46,6 +45,14 @@ def generate_categories_keyboard(user_forecasts: dict) -> InlineKeyboardMarkup:
         cb = f"buy_{sport}" if count else "none"
         kb.append([InlineKeyboardButton(f"{sport.capitalize()} — {count}", callback_data=cb)])
     return InlineKeyboardMarkup(inline_keyboard=kb)
+
+def admin_menu_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton("📤 Загрузить прогноз", callback_data="admin_upload")],
+        [InlineKeyboardButton("📊 Просмотр прогнозов", callback_data="admin_view")],
+        [InlineKeyboardButton("🗑 Очистить прогнозы", callback_data="admin_clear")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="back_to_start")],
+    ])
 
 def bottom_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     buttons = [[KeyboardButton("🔮 AI прогнозы")]]
@@ -83,8 +90,6 @@ async def start_handler(message: Message, state: FSMContext):
         )
         await state.update_data(intro_done=True)
         return
-
-    # если intro_done == True
     await full_start(message, state)
 
 # ——— Полный старт (после интро) ———
@@ -102,39 +107,51 @@ async def full_start(message: Message, state: FSMContext):
             user_forecasts[sport] = files
         await state.update_data(user_forecasts=user_forecasts)
 
-    await message.answer("Выбери категорию спорта для получения прогноза:", reply_markup=generate_categories_keyboard(user_forecasts))
+    await message.answer(
+        "Выбери категорию спорта для получения прогноза:",
+        reply_markup=generate_categories_keyboard(user_forecasts)
+    )
     await message.answer("🦅", reply_markup=bottom_keyboard(message.from_user.id))
 
-# ——— Добавляем общий обработчик для всех типов сообщений ———
+# ——— Обработчик нажатия кнопки «Админ» ———
+@dp.message(lambda m: m.text == "Админ")
+async def admin_menu_handler(message: Message):
+    logger.info(f"Запрошено админ-меню пользователем {message.from_user.id}")
+    await message.answer("Выберите действие:", reply_markup=admin_menu_keyboard())
+
+# ——— Обработчик callback’ов админского меню ———
+@dp.callback_query()
+async def admin_callback_handler(callback_query: CallbackQuery):
+    logger.info(f"Callback data: {callback_query.data}")
+    data = callback_query.data
+    if data == "admin_upload":
+        await callback_query.message.answer("📤 Загрузка прогноза...")
+        # Начало загрузки фото
+        await callback_query.message.answer("Отправьте фото для загрузки.")
+        await UploadState.waiting_photo.set()
+    elif data == "admin_view":
+        await callback_query.message.answer("📊 Просмотр прогнозов...")
+    elif data == "admin_clear":
+        await callback_query.message.answer("🗑 Прогнозы очищены...")
+    elif data == "back_to_start":
+        await callback_query.message.answer("🔙 Возвращаемся в начало...")
+    await callback_query.answer()
+
+# ——— Обработчик загрузки фото ———
+@dp.message(content_types=ContentType.PHOTO, state=UploadState.waiting_photo)
+async def handle_photo_upload(message: Message, state: FSMContext):
+    # Сохраняем фото в папку, например, /forecasts
+    file_id = message.photo[-1].file_id
+    file = await bot.get_file(file_id)
+    await bot.download_file(file.file_path, f"forecasts/{file.file_path.split('/')[-1]}")
+    await message.answer("Фото успешно загружено!")
+    await state.finish()  # Завершаем состояние
+
+# ——— Обработчик для остальных типов сообщений (обработка текста и проч.) ———
 @dp.message()
 async def general_handler(message: Message):
     logger.info(f"Обработка сообщения с ID {message.message_id} от пользователя {message.from_user.id}")
     await message.answer("Я получил ваше сообщение! ✅")
-
-# ——— Обработчик нажатия кнопки «Админ» ———
-@dp.message(lambda message: message.text == "Админ")
-async def admin_menu_handler(message: Message):
-    logger.info(f"Запрошено админ-меню пользователем {message.from_user.id}")
-    await message.answer(
-        "Выберите действие:", 
-        reply_markup=admin_menu_keyboard()
-    )
-
-# ——— Обработчик для callback'ов админского меню ———
-@dp.callback_query()
-async def admin_callback_handler(callback_query: CallbackQuery):
-    logger.info(f"Callback data: {callback_query.data}")
-    
-    if callback_query.data == "admin_upload":
-        await callback_query.message.answer("📤 Загрузка прогноза...")
-    elif callback_query.data == "admin_view":
-        await callback_query.message.answer("📊 Просмотр прогнозов...")
-    elif callback_query.data == "admin_clear":
-        await callback_query.message.answer("🗑 Прогнозы очищены...")
-    elif callback_query.data == "back_to_start":
-        await callback_query.message.answer("🔙 Возвращаемся в начало...")
-    
-    await callback_query.answer()  # Отправляем ответ на callback, чтобы скрыть клавиатуру
 
 # ——— Webhook handlers ———
 async def on_start(request):
@@ -149,14 +166,14 @@ async def on_webhook(request):
         logger.error(f"Webhook handling error: {e}")
     return web.Response()
 
-# ——— Установка webhook при старте сервера ———
+# ——— Установка webhook при старте ———
 async def on_app_startup(app):
     info = await bot.set_webhook(WEBHOOK_URL)
     logger.info(f"Webhook set: {info}")
 
 # ——— Запуск приложения ———
 app = web.Application()
-app.add_routes([ 
+app.add_routes([
     web.post(WEBHOOK_PATH, on_webhook),
     web.get("/", on_start),
 ])
