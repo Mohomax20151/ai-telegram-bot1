@@ -105,6 +105,12 @@ async def full_start(message: Message, state: FSMContext):
     await message.answer("Выбери категорию спорта для получения прогноза:", reply_markup=generate_categories_keyboard(user_forecasts))
     await message.answer("🦅", reply_markup=bottom_keyboard(message.from_user.id))
 
+# ——— Добавляем общий обработчик для всех типов сообщений ———
+@dp.message()
+async def general_handler(message: Message):
+    logger.info(f"Обработка сообщения с ID {message.message_id} от пользователя {message.from_user.id}")
+    await message.answer("Я получил ваше сообщение! ✅")
+
 # ——— Webhook handlers ———
 async def on_start(request):
     return web.Response(text="Bot is running")
