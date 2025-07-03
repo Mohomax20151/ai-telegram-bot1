@@ -2,7 +2,7 @@ import os
 import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message, KeyboardButton, ReplyKeyboardMarkup, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -50,7 +50,7 @@ def generate_categories_keyboard(user_forecasts: dict) -> InlineKeyboardMarkup:
 def bottom_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     buttons = [[KeyboardButton("🔮 AI прогнозы")]]
     if user_id == ADMIN_ID:
-        buttons.append([KeyboardButton("Админ")])
+        buttons.append([KeyboardButton("Админ")])  # Кнопка "Админ"
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 # ——— Обработчик /start ———
@@ -111,6 +111,31 @@ async def general_handler(message: Message):
     logger.info(f"Обработка сообщения с ID {message.message_id} от пользователя {message.from_user.id}")
     await message.answer("Я получил ваше сообщение! ✅")
 
+# ——— Обработчик нажатия кнопки «Админ» ———
+@dp.message(lambda message: message.text == "Админ")
+async def admin_menu_handler(message: Message):
+    logger.info(f"Запрошено админ-меню пользователем {message.from_user.id}")
+    await message.answer(
+        "Выберите действие:", 
+        reply_markup=admin_menu_keyboard()
+    )
+
+# ——— Обработчик для callback'ов админского меню ———
+@dp.callback_query()
+async def admin_callback_handler(callback_query: CallbackQuery):
+    logger.info(f"Callback data: {callback_query.data}")
+    
+    if callback_query.data == "admin_upload":
+        await callback_query.message.answer("📤 Загрузка прогноза...")
+    elif callback_query.data == "admin_view":
+        await callback_query.message.answer("📊 Просмотр прогнозов...")
+    elif callback_query.data == "admin_clear":
+        await callback_query.message.answer("🗑 Прогнозы очищены...")
+    elif callback_query.data == "back_to_start":
+        await callback_query.message.answer("🔙 Возвращаемся в начало...")
+    
+    await callback_query.answer()  # Отправляем ответ на callback, чтобы скрыть клавиатуру
+
 # ——— Webhook handlers ———
 async def on_start(request):
     return web.Response(text="Bot is running")
@@ -131,7 +156,7 @@ async def on_app_startup(app):
 
 # ——— Запуск приложения ———
 app = web.Application()
-app.add_routes([
+app.add_routes([ 
     web.post(WEBHOOK_PATH, on_webhook),
     web.get("/", on_start),
 ])
