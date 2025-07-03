@@ -232,8 +232,11 @@ async def on_start(request):
 
 async def on_webhook(request):
     try:
+        # 1. Получаем сырые данные из POST
         data = await request.json()
-        update = Update.model_validate(data)
+        # 2. Создаём объект Update напрямую
+        update = Update(**data)
+        # 3. Передаём update диспетчеру вместе с bot
         await dp.feed_update(bot, update)
     except Exception as e:
         logger.error(f"Webhook handling error: {e}")
