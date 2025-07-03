@@ -4,10 +4,6 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import (
     Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    ReplyKeyboardMarkup,
-    KeyboardButton,
     Message,
     CallbackQuery,
     FSInputFile,
@@ -17,6 +13,16 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiohttp import web
+
+# Теперь модели создаём через .model_validate() (Pydantic v2)
+
+# Aliases для удобства
+from aiogram.types import (
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+)
 
 # ——— Конфигурация ———
 BOT_TOKEN    = os.getenv("BOT_TOKEN",    "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ")
@@ -46,24 +52,28 @@ def generate_categories_keyboard(user_forecasts: dict) -> InlineKeyboardMarkup:
     for sport in CATEGORIES:
         count = len(user_forecasts.get(sport, []))
         cb = f"buy_{sport}" if count else "none"
-        kb.append([InlineKeyboardButton(f"{sport.capitalize()} — {count}", callback_data=cb)])
-    return InlineKeyboardMarkup(inline_keyboard=kb)
+        kb.append([{"text": f"{sport.capitalize()} — {count}", "callback_data": cb}])
+    return InlineKeyboardMarkup.model_validate({"inline_keyboard": kb})
 
 def admin_menu_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton("📤 Загрузить прогноз", callback_data="admin_upload")],
-        [InlineKeyboardButton("📊 Просмотр прогнозов", callback_data="admin_view")],
-        [InlineKeyboardButton("🗑 Очистить прогнозы", callback_data="admin_clear")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="back_to_start")],
-    ])
+    kb = [
+        [{"text": "📤 Загрузить прогноз", "callback_data": "admin_upload"}],
+        [{"text": "📊 Просмотр прогнозов", "callback_data": "admin_view"}],
+        [{"text": "🗑 Очистить прогнозы", "callback_data": "admin_clear"}],
+        [{"text": "🔙 Назад", "callback_data": "back_to_start"}],
+    ]
+    return InlineKeyboardMarkup.model_validate({"inline_keyboard": kb})
 
 def bottom_keyboard(user_id: int) -> ReplyKeyboardMarkup:
-    buttons = [[KeyboardButton("🔮 AI прогнозы")]]
+    kb = [[{"text": "🔮 AI прогнозы"}]]
     if user_id == ADMIN_ID:
-        buttons.append([KeyboardButton("Админ")])
-    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+        kb.append([{"text": "Админ"}])
+    return ReplyKeyboardMarkup.model_validate({
+        "keyboard": kb,
+        "resize_keyboard": True
+    })
 
-# ——— Обработчик /start ———
+# ——— /start ———
 @dp.message(Command("start"))
 async def start_handler(message: Message, state: FSMContext):
     data = await state.get_data()
@@ -85,28 +95,30 @@ async def start_handler(message: Message, state: FSMContext):
             "⚙️ <b>Сейчас</b>: AI сканирует источники, анализирует коэффициенты\n"
             "🚀 <b>В будущем</b>: интерактивная аналитика, новые функции"
         )
-        await message.answer(
-            "Нажмите, чтобы перейти в раздел прогнозов:",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton("🔮 AI прогнозы", callback_data="start_predictions")]]
-            )
-        )
+        # Кнопка "🔮 AI прогнозы"
+        ikm = InlineKeyboardMarkup.model_validate({
+            "inline_keyboard": [
+                [{"text": "🔮 AI прогнозы", "callback_data": "start_predictions"}]
+            ]
+        })
+        await message.answer("Нажмите, чтобы перейти в раздел прогнозов:", reply_markup=ikm)
         await state.update_data(intro_done=True)
         return
+
     await full_start(message, state)
 
-# ——— Обработчик кнопки "AI прогнозы" (inline) ———
+# ——— Inline "AI прогнозы" ———
 @dp.callback_query(F.data == "start_predictions")
 async def handle_intro_button(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await full_start(callback.message, state)
 
-# ——— Обработчик кнопки "AI прогнозы" (reply) ———
+# ——— Reply "🔮 AI прогнозы" ———
 @dp.message(F.text == "🔮 AI прогнозы")
 async def bottom_start(message: Message, state: FSMContext):
     await full_start(message, state)
 
-# ——— Функция показа категорий ———
+# ——— Показ категорий ———
 async def full_start(message: Message, state: FSMContext):
     data = await state.get_data()
     user_forecasts = data.get("user_forecasts")
@@ -127,13 +139,13 @@ async def full_start(message: Message, state: FSMContext):
     )
     await message.answer("🦅", reply_markup=bottom_keyboard(message.from_user.id))
 
-# ——— Обработчик "Админ" ———
+# ——— Админ-панель ———
 @dp.message(F.text == "Админ")
 async def admin_menu_handler(message: Message):
     logger.info(f"Запрошено админ-меню пользователем {message.from_user.id}")
     await message.answer("Выберите действие:", reply_markup=admin_menu_keyboard())
 
-# ——— Обработчики админских callback’ов ———
+# ——— Админ callback’ы ———
 @dp.callback_query(F.data == "admin_upload")
 async def admin_upload(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
@@ -168,18 +180,17 @@ async def admin_back(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await full_start(callback.message, state)
 
-# ——— Обработчик загрузки фото ———
+# ——— Загрузка фото ———
 @dp.message(F.photo, StateFilter(UploadState.waiting_photo))
 async def handle_photo_upload(message: Message, state: FSMContext):
     await state.update_data(photo_id=message.photo[-1].file_id)
     await state.set_state(UploadState.waiting_category)
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=s.capitalize(), callback_data=f"save_to_{s}")]
-            for s in CATEGORIES
-        ]
-    )
-    await message.answer("Выберите категорию для сохранения:", reply_markup=keyboard)
+    kb = [
+        [{"text": s.capitalize(), "callback_data": f"save_to_{s}"}]
+        for s in CATEGORIES
+    ]
+    ikm = InlineKeyboardMarkup.model_validate({"inline_keyboard": kb})
+    await message.answer("Выберите категорию для сохранения:", reply_markup=ikm)
 
 @dp.callback_query(F.data.startswith("save_to_"), StateFilter(UploadState.waiting_category))
 async def save_to_category(callback: CallbackQuery, state: FSMContext):
@@ -196,7 +207,7 @@ async def save_to_category(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(f"✅ Прогноз сохранён в категорию {sport.capitalize()}")
     await state.clear()
 
-# ——— Обработчик покупки прогноза ———
+# ——— Покупка прогноза ———
 @dp.callback_query(F.data.startswith("buy_"))
 async def buy_handler(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -215,37 +226,38 @@ async def buy_handler(callback: CallbackQuery, state: FSMContext):
     user_forecasts[sport] = files
     await state.update_data(user_forecasts=user_forecasts)
     try:
-        await callback.message.edit_reply_markup(generate_categories_keyboard(user_forecasts))
+        await callback.message.edit_reply_markup(
+            generate_categories_keyboard(user_forecasts)
+        )
     except:
         pass
     await callback.answer()
 
-# ——— Общий fallback-хендлер ———
+# ——— Fallback ———
 @dp.message()
 async def general_handler(message: Message):
     logger.info(f"Получено сообщение {message.message_id} от {message.from_user.id}")
     await message.answer("Я получил ваше сообщение! ✅")
 
-# ——— Webhook handlers ———
+# ——— Webhook ———
 async def on_start(request):
     return web.Response(text="Bot is running")
 
-# ——— Webhook handler ———
 async def on_webhook(request):
-    try:
-        data = await request.json()  # Получаем данные JSON
-        update = Update(**data)      # Инициализируем объект Update с данными
-        await dp.feed_update(bot, update)  # Отправляем обработчику
-    except Exception as e:
-        logger.error(f"Webhook handling error: {e}")
-    return web.Response()  # Возвращаем ответ
+    data = await request.json()
+    update = Update(**data)
+    await dp.feed_update(bot, update)
+    return web.Response()
 
 async def on_app_startup(app):
     info = await bot.set_webhook(WEBHOOK_URL)
     logger.info(f"Webhook set: {info}")
 
 app = web.Application()
-app.add_routes([web.post(WEBHOOK_PATH, on_webhook), web.get("/", on_start)])
+app.add_routes([
+    web.post(WEBHOOK_PATH, on_webhook),
+    web.get("/", on_start),
+])
 app.on_startup.append(on_app_startup)
 
 if __name__ == "__main__":
