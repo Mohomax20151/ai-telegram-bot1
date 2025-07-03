@@ -120,19 +120,27 @@ async def bottom_start(message: Message, state: FSMContext):
 
 # ——— Показ категорий ———
 async def full_start(message: Message, state: FSMContext):
+    # Получаем все данные пользователя
     data = await state.get_data()
-    user_forecasts = data.get("user_forecasts")
-    if user_forecasts is None:
+    # Инициализируем кеш прогнозов только один раз
+    if data.get("user_forecasts") is None:
         user_forecasts = {}
         for sport in CATEGORIES:
             folder = f"forecasts/{sport}"
             try:
-                files = [f for f in os.listdir(folder) if f.lower().endswith((".png","jpg","jpeg"))]
+                files = [
+                    f for f in os.listdir(folder)
+                    if f.lower().endswith((".png","jpg","jpeg"))
+                ]
             except FileNotFoundError:
                 files = []
             user_forecasts[sport] = files
+        # Сохраняем в state
         await state.update_data(user_forecasts=user_forecasts)
+    else:
+        user_forecasts = data["user_forecasts"]
 
+    # Отправляем клавиатуру с актуальными числами
     await message.answer(
         "Выбери категорию спорта для получения прогноза:",
         reply_markup=generate_categories_keyboard(user_forecasts)
