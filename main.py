@@ -1,25 +1,25 @@
 import os
 import logging
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    Message, KeyboardButton, ReplyKeyboardMarkup, CallbackQuery, ContentType
+    Message, KeyboardButton, ReplyKeyboardMarkup, CallbackQuery
 )
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
 
 # ——— Конфигурация ———
-BOT_TOKEN   = os.getenv("BOT_TOKEN", "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ")
-ADMIN_ID    = int(os.getenv("ADMIN_ID", "6688088575"))
-CATEGORIES  = ['football', 'hockey', 'dota', 'cs', 'tennis']
-WEBHOOK_HOST= os.getenv("WEBHOOK_HOST", "https://ai-telegram-bot1.onrender.com")
-WEBHOOK_PATH= f"/{BOT_TOKEN}"
-WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-PORT        = int(os.getenv("PORT", "10000"))
+BOT_TOKEN    = os.getenv("BOT_TOKEN",    "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ")
+ADMIN_ID     = int(os.getenv("ADMIN_ID", "6688088575"))
+CATEGORIES   = ['football', 'hockey', 'dota', 'cs', 'tennis']
+WEBHOOK_HOST = os.getenv("WEBHOOK_HOST", "https://ai-telegram-bot1.onrender.com")
+WEBHOOK_PATH = f"/{BOT_TOKEN}"
+WEBHOOK_URL  = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
+PORT         = int(os.getenv("PORT", "10000"))
 
 # ——— Логирование ———
 logging.basicConfig(level=logging.INFO)
@@ -57,7 +57,7 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
 def bottom_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     buttons = [[KeyboardButton("🔮 AI прогнозы")]]
     if user_id == ADMIN_ID:
-        buttons.append([KeyboardButton("Админ")])  # Кнопка "Админ"
+        buttons.append([KeyboardButton("Админ")])
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 # ——— Обработчик /start ———
@@ -126,7 +126,6 @@ async def admin_callback_handler(callback_query: CallbackQuery):
     data = callback_query.data
     if data == "admin_upload":
         await callback_query.message.answer("📤 Загрузка прогноза...")
-        # Начало загрузки фото
         await callback_query.message.answer("Отправьте фото для загрузки.")
         await UploadState.waiting_photo.set()
     elif data == "admin_view":
@@ -138,16 +137,16 @@ async def admin_callback_handler(callback_query: CallbackQuery):
     await callback_query.answer()
 
 # ——— Обработчик загрузки фото ———
-@dp.message(content_types=ContentType.PHOTO, state=UploadState.waiting_photo)
+@dp.message(F.photo, StateFilter(UploadState.waiting_photo))
 async def handle_photo_upload(message: Message, state: FSMContext):
-    # Сохраняем фото в папку, например, /forecasts
     file_id = message.photo[-1].file_id
     file = await bot.get_file(file_id)
-    await bot.download_file(file.file_path, f"forecasts/{file.file_path.split('/')[-1]}")
+    filename = file.file_path.split("/")[-1]
+    await bot.download_file(file.file_path, f"forecasts/{filename}")
     await message.answer("Фото успешно загружено!")
-    await state.finish()  # Завершаем состояние
+    await state.finish()
 
-# ——— Обработчик для остальных типов сообщений (обработка текста и проч.) ———
+# ——— Общий fallback-хендлер ———
 @dp.message()
 async def general_handler(message: Message):
     logger.info(f"Обработка сообщения с ID {message.message_id} от пользователя {message.from_user.id}")
