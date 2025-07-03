@@ -113,7 +113,7 @@ async def on_webhook(request):
     try:
         data = await request.json()
         update = Update.model_validate(data, context={"bot": bot})
-        await dp.feed_update(update)
+        await dp.feed_update(bot, update)
     except Exception as e:
         logger.error(f"Webhook handling error: {e}")
     return web.Response()
