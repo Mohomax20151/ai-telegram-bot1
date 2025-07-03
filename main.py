@@ -14,7 +14,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiohttp import web
 
-# Теперь модели создаём через .model_validate() (Pydantic v2)
+# ——— Текстовый прогноз (глобально) ———
+TEXT_FORECAST: str = ""
 
 # Aliases для удобства
 from aiogram.types import (
@@ -45,6 +46,7 @@ dp  = Dispatcher(storage=MemoryStorage())
 class UploadState(StatesGroup):
     waiting_photo    = State()
     waiting_category = State()
+    waiting_text     = State()  # Добавлено для загрузки текста
 
 # ——— Клавиатуры ———
 def generate_categories_keyboard(user_forecasts: dict) -> InlineKeyboardMarkup:
@@ -60,6 +62,7 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
         [{"text": "📤 Загрузить прогноз", "callback_data": "admin_upload"}],
         [{"text": "📊 Просмотр прогнозов", "callback_data": "admin_view"}],
         [{"text": "🗑 Очистить прогнозы", "callback_data": "admin_clear"}],
+        [{"text": "📝 Загрузить текстом", "callback_data": "admin_upload_text"}],  # Новая кнопка
         [{"text": "🔙 Назад", "callback_data": "back_to_start"}],
     ]
     return InlineKeyboardMarkup.model_validate({"inline_keyboard": kb})
@@ -68,6 +71,7 @@ def bottom_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     kb = [[{"text": "🔮 AI прогнозы"}]]
     if user_id == ADMIN_ID:
         kb.append([{"text": "Админ"}])
+    kb.append([{"text": "📝 Прогнозы текстом"}])  # Добавлена кнопка для текстовых прогнозов
     return ReplyKeyboardMarkup.model_validate({
         "keyboard": kb,
         "resize_keyboard": True
@@ -175,6 +179,8 @@ async def admin_view(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "admin_clear")
 async def admin_clear(callback: CallbackQuery):
+    global TEXT_FORECAST
+    TEXT_FORECAST = ""  # Очищаем текстовый прогноз
     for sport in CATEGORIES:
         folder = f"forecasts/{sport}"
         if os.path.exists(folder):
@@ -183,10 +189,19 @@ async def admin_clear(callback: CallbackQuery):
     await callback.answer()
     await callback.message.answer("🗑 Все прогнозы очищены.")
 
-@dp.callback_query(F.data == "back_to_start")
-async def admin_back(callback: CallbackQuery, state: FSMContext):
+@dp.callback_query(F.data == "admin_upload_text")
+async def admin_upload_text(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    await full_start(callback.message, state)
+    await callback.message.answer("Отправьте текст прогнозов:")
+    await state.set_state(UploadState.waiting_text)
+
+# ——— Загрузка текста ———
+@dp.message(StateFilter(UploadState.waiting_text))
+async def handle_text_upload(message: Message, state: FSMContext):
+    global TEXT_FORECAST
+    TEXT_FORECAST = message.text
+    await message.answer("Текстовый прогноз сохранён!")
+    await state.clear()
 
 # ——— Загрузка фото ———
 @dp.message(F.photo, StateFilter(UploadState.waiting_photo))
@@ -262,7 +277,7 @@ async def on_app_startup(app):
     logger.info(f"Webhook set: {info}")
 
 app = web.Application()
-app.add_routes([
+app.add_routes([ 
     web.post(WEBHOOK_PATH, on_webhook),
     web.get("/", on_start),
 ])
