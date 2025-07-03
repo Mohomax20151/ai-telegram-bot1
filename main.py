@@ -3,13 +3,19 @@ import logging
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    Message, KeyboardButton, ReplyKeyboardMarkup, CallbackQuery
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    Message,
+    CallbackQuery,
+    FSInputFile,
 )
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
 from aiohttp import web
 
 # ——— Конфигурация ———
@@ -33,9 +39,6 @@ dp  = Dispatcher(storage=MemoryStorage())
 class UploadState(StatesGroup):
     waiting_photo    = State()
     waiting_category = State()
-
-class IntroState(StatesGroup):
-    intro_shown = State()
 
 # ——— Клавиатуры ———
 def generate_categories_keyboard(user_forecasts: dict) -> InlineKeyboardMarkup:
@@ -92,7 +95,18 @@ async def start_handler(message: Message, state: FSMContext):
         return
     await full_start(message, state)
 
-# ——— Полный старт (после интро) ———
+# ——— Обработчик кнопки "AI прогнозы" (inline) ———
+@dp.callback_query(F.data == "start_predictions")
+async def handle_intro_button(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await full_start(callback.message, state)
+
+# ——— Обработчик кнопки "AI прогнозы" (reply) ———
+@dp.message(F.text == "🔮 AI прогнозы")
+async def bottom_start(message: Message, state: FSMContext):
+    await full_start(message, state)
+
+# ——— Функция показа категорий ———
 async def full_start(message: Message, state: FSMContext):
     data = await state.get_data()
     user_forecasts = data.get("user_forecasts")
@@ -113,43 +127,103 @@ async def full_start(message: Message, state: FSMContext):
     )
     await message.answer("🦅", reply_markup=bottom_keyboard(message.from_user.id))
 
-# ——— Обработчик нажатия кнопки «Админ» ———
-@dp.message(lambda m: m.text == "Админ")
+# ——— Обработчик "Админ" ———
+@dp.message(F.text == "Админ")
 async def admin_menu_handler(message: Message):
     logger.info(f"Запрошено админ-меню пользователем {message.from_user.id}")
     await message.answer("Выберите действие:", reply_markup=admin_menu_keyboard())
 
-# ——— Обработчик callback’ов админского меню ———
-@dp.callback_query()
-async def admin_callback_handler(callback_query: CallbackQuery):
-    logger.info(f"Callback data: {callback_query.data}")
-    data = callback_query.data
-    if data == "admin_upload":
-        await callback_query.message.answer("📤 Загрузка прогноза...")
-        await callback_query.message.answer("Отправьте фото для загрузки.")
-        await UploadState.waiting_photo.set()
-    elif data == "admin_view":
-        await callback_query.message.answer("📊 Просмотр прогнозов...")
-    elif data == "admin_clear":
-        await callback_query.message.answer("🗑 Прогнозы очищены...")
-    elif data == "back_to_start":
-        await callback_query.message.answer("🔙 Возвращаемся в начало...")
-    await callback_query.answer()
+# ——— Обработчики админских callback’ов ———
+@dp.callback_query(F.data == "admin_upload")
+async def admin_upload(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.answer("📤 Загрузка прогнозов…\nОтправьте фото для загрузки.")
+    await state.set_state(UploadState.waiting_photo)
+
+@dp.callback_query(F.data == "admin_view")
+async def admin_view(callback: CallbackQuery):
+    report = ""
+    for sport in CATEGORIES:
+        folder = f"forecasts/{sport}"
+        try:
+            count = len([f for f in os.listdir(folder) if f.lower().endswith((".png","jpg","jpeg"))])
+        except FileNotFoundError:
+            count = 0
+        report += f"{sport.capitalize()}: {count} шт.\n"
+    await callback.answer()
+    await callback.message.answer(f"📊 Статистика прогнозов:\n\n{report}")
+
+@dp.callback_query(F.data == "admin_clear")
+async def admin_clear(callback: CallbackQuery):
+    for sport in CATEGORIES:
+        folder = f"forecasts/{sport}"
+        if os.path.exists(folder):
+            for f in os.listdir(folder):
+                os.remove(os.path.join(folder, f))
+    await callback.answer()
+    await callback.message.answer("🗑 Все прогнозы очищены.")
+
+@dp.callback_query(F.data == "back_to_start")
+async def admin_back(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await full_start(callback.message, state)
 
 # ——— Обработчик загрузки фото ———
 @dp.message(F.photo, StateFilter(UploadState.waiting_photo))
 async def handle_photo_upload(message: Message, state: FSMContext):
-    file_id = message.photo[-1].file_id
-    file = await bot.get_file(file_id)
-    filename = file.file_path.split("/")[-1]
-    await bot.download_file(file.file_path, f"forecasts/{filename}")
-    await message.answer("Фото успешно загружено!")
-    await state.finish()
+    await state.update_data(photo_id=message.photo[-1].file_id)
+    await state.set_state(UploadState.waiting_category)
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=s.capitalize(), callback_data=f"save_to_{s}")]
+            for s in CATEGORIES
+        ]
+    )
+    await message.answer("Выберите категорию для сохранения:", reply_markup=keyboard)
+
+@dp.callback_query(F.data.startswith("save_to_"), StateFilter(UploadState.waiting_category))
+async def save_to_category(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    photo_id = data.get("photo_id")
+    sport = callback.data.replace("save_to_", "")
+    folder = f"forecasts/{sport}"
+    os.makedirs(folder, exist_ok=True)
+    files = [f for f in os.listdir(folder) if f.lower().endswith((".png","jpg","jpeg"))]
+    file_name = f"{len(files)+1}.jpg"
+    file = await bot.get_file(photo_id)
+    await bot.download_file(file.file_path, os.path.join(folder, file_name))
+    await callback.answer()
+    await callback.message.answer(f"✅ Прогноз сохранён в категорию {sport.capitalize()}")
+    await state.clear()
+
+# ——— Обработчик покупки прогноза ———
+@dp.callback_query(F.data.startswith("buy_"))
+async def buy_handler(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    user_forecasts = data.get("user_forecasts", {})
+    sport = callback.data.replace("buy_", "")
+    files = user_forecasts.get(sport, [])
+    if not files:
+        await callback.answer("Прогнозов в этой категории нет 😞", show_alert=True)
+        return
+    file_name = files.pop(0)
+    path = os.path.join(f"forecasts/{sport}", file_name)
+    photo = FSInputFile(path)
+    emojis = {"football":"⚽️","hockey":"🏒","dota":"🎮","cs":"🔫","tennis":"🎾"}
+    caption = f"{sport.capitalize()} {emojis.get(sport,'')}"
+    await callback.message.answer_photo(photo, caption=caption)
+    user_forecasts[sport] = files
+    await state.update_data(user_forecasts=user_forecasts)
+    try:
+        await callback.message.edit_reply_markup(generate_categories_keyboard(user_forecasts))
+    except:
+        pass
+    await callback.answer()
 
 # ——— Общий fallback-хендлер ———
 @dp.message()
 async def general_handler(message: Message):
-    logger.info(f"Обработка сообщения с ID {message.message_id} от пользователя {message.from_user.id}")
+    logger.info(f"Получено сообщение {message.message_id} от {message.from_user.id}")
     await message.answer("Я получил ваше сообщение! ✅")
 
 # ——— Webhook handlers ———
@@ -165,17 +239,12 @@ async def on_webhook(request):
         logger.error(f"Webhook handling error: {e}")
     return web.Response()
 
-# ——— Установка webhook при старте ———
 async def on_app_startup(app):
     info = await bot.set_webhook(WEBHOOK_URL)
     logger.info(f"Webhook set: {info}")
 
-# ——— Запуск приложения ———
 app = web.Application()
-app.add_routes([
-    web.post(WEBHOOK_PATH, on_webhook),
-    web.get("/", on_start),
-])
+app.add_routes([web.post(WEBHOOK_PATH, on_webhook), web.get("/", on_start)])
 app.on_startup.append(on_app_startup)
 
 if __name__ == "__main__":
