@@ -9,12 +9,11 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
 
-# ——— Настройки бота и диспетчера ———
 BOT_TOKEN = "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ"
 ADMIN_ID = 6688088575
 CATEGORIES = ['football', 'hockey', 'dota', 'cs', 'tennis']
 
-# создаём Bot с глобальным HTML parse_mode
+# создаём Bot с параметром parse_mode
 bot = Bot(
     token=BOT_TOKEN,
     default=DefaultBotProperties(parse_mode="HTML")
@@ -30,7 +29,7 @@ WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ——— Определение состояний FSM ———
+# Состояния
 class UploadState(StatesGroup):
     waiting_photo = State()
     waiting_category = State()
@@ -38,7 +37,7 @@ class UploadState(StatesGroup):
 class IntroState(StatesGroup):
     intro_shown = State()
 
-# ——— Вспомогательные функции для клавиатур ———
+# Вспомогательные функции для клавиатур
 def generate_categories_keyboard(user_forecasts):
     keyboard = []
     for sport in CATEGORIES:
@@ -62,7 +61,7 @@ def bottom_keyboard(user_id):
         buttons.append([KeyboardButton("Админ")])
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
-# ——— Обработчики команд ———
+# Обработчики команд
 @dp.message(Command("start"))
 async def start_handler(message: Message, state: FSMContext):
     data = await state.get_data()
@@ -96,7 +95,7 @@ async def start_handler(message: Message, state: FSMContext):
 
     await full_start(message, state)
 
-# ——— Webhook Handlers ———
+# Webhook Handlers
 async def on_start(request):
     return web.Response(text="Bot is running")
 
@@ -115,7 +114,7 @@ async def set_webhook():
     info = await bot.set_webhook(WEBHOOK_URL)
     logger.info(f"Webhook set: {info}")
 
-# ——— Основная логика запуска сервера и бота ———
+# Стартуем сервер
 app = web.Application()
 app.add_routes([
     web.post(WEBHOOK_PATH, on_webhook),
@@ -128,5 +127,4 @@ async def main():
     web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    main()
