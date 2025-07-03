@@ -59,11 +59,11 @@ def generate_categories_keyboard(user_forecasts: dict) -> InlineKeyboardMarkup:
 
 def admin_menu_keyboard() -> InlineKeyboardMarkup:
     kb = [
-        [{"text": "📤 Загрузить прогноз", "callback_data": "admin_upload"}],
-        [{"text": "📊 Просмотр прогнозов", "callback_data": "admin_view"}],
-        [{"text": "🗑 Очистить прогнозы", "callback_data": "admin_clear"}],
-        [{"text": "📝 Загрузить текстом", "callback_data": "admin_upload_text"}],  # Новая кнопка
-        [{"text": "🔙 Назад", "callback_data": "back_to_start"}],
+        [{"text": "📤 Загрузить прогноз",    "callback_data": "admin_upload"}],
+        [{"text": "📊 Просмотр прогнозов",   "callback_data": "admin_view"}],
+        [{"text": "🗑 Очистить прогнозы",    "callback_data": "admin_clear"}],
+        [{"text": "📝 Загрузить текстом",     "callback_data": "admin_upload_text"}],  # Новая кнопка
+        [{"text": "🔙 Назад",                "callback_data": "back_to_start"}],
     ]
     return InlineKeyboardMarkup.model_validate({"inline_keyboard": kb})
 
@@ -99,11 +99,8 @@ async def start_handler(message: Message, state: FSMContext):
             "⚙️ <b>Сейчас</b>: AI сканирует источники, анализирует коэффициенты\n"
             "🚀 <b>В будущем</b>: интерактивная аналитика, новые функции"
         )
-        # Кнопка "🔮 AI прогнозы"
         ikm = InlineKeyboardMarkup.model_validate({
-            "inline_keyboard": [
-                [{"text": "🔮 AI прогнозы", "callback_data": "start_predictions"}]
-            ]
+            "inline_keyboard": [[{"text": "🔮 AI прогнозы", "callback_data": "start_predictions"}]]
         })
         await message.answer("Нажмите, чтобы перейти в раздел прогнозов:", reply_markup=ikm)
         await state.update_data(intro_done=True)
@@ -124,27 +121,20 @@ async def bottom_start(message: Message, state: FSMContext):
 
 # ——— Показ категорий ———
 async def full_start(message: Message, state: FSMContext):
-    # Получаем все данные пользователя
     data = await state.get_data()
-    # Инициализируем кеш прогнозов только один раз
     if data.get("user_forecasts") is None:
         user_forecasts = {}
         for sport in CATEGORIES:
             folder = f"forecasts/{sport}"
             try:
-                files = [
-                    f for f in os.listdir(folder)
-                    if f.lower().endswith((".png","jpg","jpeg"))
-                ]
+                files = [f for f in os.listdir(folder) if f.lower().endswith((".png","jpg","jpeg"))]
             except FileNotFoundError:
                 files = []
             user_forecasts[sport] = files
-        # Сохраняем в state
         await state.update_data(user_forecasts=user_forecasts)
     else:
         user_forecasts = data["user_forecasts"]
 
-    # Отправляем клавиатуру с актуальными числами
     await message.answer(
         "Выбери категорию спорта для получения прогноза:",
         reply_markup=generate_categories_keyboard(user_forecasts)
@@ -154,7 +144,6 @@ async def full_start(message: Message, state: FSMContext):
 # ——— Админ-панель ———
 @dp.message(F.text == "Админ")
 async def admin_menu_handler(message: Message):
-    logger.info(f"Запрошено админ-меню пользователем {message.from_user.id}")
     await message.answer("Выберите действие:", reply_markup=admin_menu_keyboard())
 
 # ——— Админ callback’ы ———
@@ -180,7 +169,7 @@ async def admin_view(callback: CallbackQuery):
 @dp.callback_query(F.data == "admin_clear")
 async def admin_clear(callback: CallbackQuery):
     global TEXT_FORECAST
-    TEXT_FORECAST = ""  # Очищаем текстовый прогноз
+    TEXT_FORECAST = ""
     for sport in CATEGORIES:
         folder = f"forecasts/{sport}"
         if os.path.exists(folder):
@@ -208,10 +197,7 @@ async def handle_text_upload(message: Message, state: FSMContext):
 async def handle_photo_upload(message: Message, state: FSMContext):
     await state.update_data(photo_id=message.photo[-1].file_id)
     await state.set_state(UploadState.waiting_category)
-    kb = [
-        [{"text": s.capitalize(), "callback_data": f"save_to_{s}"}]
-        for s in CATEGORIES
-    ]
+    kb = [[{"text": s.capitalize(), "callback_data": f"save_to_{s}"}] for s in CATEGORIES]
     ikm = InlineKeyboardMarkup.model_validate({"inline_keyboard": kb})
     await message.answer("Выберите категорию для сохранения:", reply_markup=ikm)
 
@@ -241,7 +227,6 @@ async def buy_handler(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Прогнозов в этой категории нет 😞", show_alert=True)
         return
 
-    # Отправляем фотографию прогноза
     file_name = files.pop(0)
     path = os.path.join(f"forecasts/{sport}", file_name)
     photo = FSInputFile(path)
@@ -249,16 +234,21 @@ async def buy_handler(callback: CallbackQuery, state: FSMContext):
     caption = f"{sport.capitalize()} {emojis.get(sport,'')}"
     await callback.message.answer_photo(photo, caption=caption)
 
-    # Обновляем state
     user_forecasts[sport] = files
     await state.update_data(user_forecasts=user_forecasts)
 
-    # Сразу редактируем кнопки с актуальным числом прогнозов
     await callback.message.edit_reply_markup(
         reply_markup=generate_categories_keyboard(user_forecasts)
     )
-
     await callback.answer()
+
+# ——— Показ текстового прогноза ———
+@dp.message(F.text == "📝 Прогнозы текстом")
+async def show_text_forecast(message: Message):
+    if TEXT_FORECAST:
+        await message.answer(TEXT_FORECAST)
+    else:
+        await message.answer("Текстовых прогнозов нет 😞")
 
 # ——— Fallback ———
 @dp.message()
@@ -281,7 +271,7 @@ async def on_app_startup(app):
     logger.info(f"Webhook set: {info}")
 
 app = web.Application()
-app.add_routes([ 
+app.add_routes([
     web.post(WEBHOOK_PATH, on_webhook),
     web.get("/", on_start),
 ])
