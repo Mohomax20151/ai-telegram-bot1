@@ -1,5 +1,7 @@
 import os
 import logging
+import asyncpg
+import databases
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import (
@@ -16,6 +18,10 @@ from aiohttp import web
 
 # ——— Текстовый прогноз (глобально) ———
 TEXT_FORECAST: str = ""
+
+# ——— Подключение к базе данных PostgreSQL ———
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://username:password@localhost/dbname")  # Замените на ваши данные
+database = databases.Database(DATABASE_URL)
 
 # Aliases для удобства
 from aiogram.types import (
@@ -85,6 +91,41 @@ def bottom_keyboard(user_id: int) -> ReplyKeyboardMarkup:
         "resize_keyboard": True
     })
 
+# ——— Подключение к базе данных (PostgreSQL) ———
+async def connect_db():
+    await database.connect()
+    logger.info("Подключение к базе данных установлено.")
+
+async def disconnect_db():
+    await database.disconnect()
+    logger.info("Подключение к базе данных закрыто.")
+
+# ——— Создание таблицы прогнозов ———
+async def create_forecasts_table():
+    query = """
+    CREATE TABLE IF NOT EXISTS forecasts (
+        id SERIAL PRIMARY KEY,
+        sport VARCHAR(50) NOT NULL,
+        file_name VARCHAR(255) NOT NULL,
+        file_path TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """
+    await database.execute(query)
+
+# ——— Загрузка прогноза в базу данных ———
+async def save_forecast_to_db(sport: str, file_name: str, file_path: str):
+    query = """
+    INSERT INTO forecasts (sport, file_name, file_path)
+    VALUES (:sport, :file_name, :file_path)
+    """
+    await database.execute(query, values={"sport": sport, "file_name": file_name, "file_path": file_path})
+
+# ——— Загрузка прогнозов из базы данных ———
+async def get_forecasts_from_db():
+    query = "SELECT sport, file_name, file_path FROM forecasts"
+    return await database.fetch_all(query)
+
 # ——— /start ———
 @dp.message(Command("start"))
 async def start_handler(message: Message, state: FSMContext):
@@ -93,7 +134,7 @@ async def start_handler(message: Message, state: FSMContext):
         await bot.send_chat_action(message.chat.id, action="upload_video")
         await message.answer_video(
             video="BAACAgIAAxkBAAIBCGhdn70oSM1KnFvcGOvOjuQ50P2TAAJ4gAACKGXwSjSGuqbploX4NgQ",
-            caption=(
+            caption=( 
                 "🎥 <b>По тенденции развития проекта</b>, в будущем будет выпущено качественное <b>реалистичное видео от AI</b>\n"
                 "📊 <b>На момент создания:</b> 71% побед, средний кэф — 1.78\n"
                 "🧠 <b>Прогнозы формируются на базе AI</b>, ежедневно в 07:00\n"
@@ -125,93 +166,23 @@ async def handle_intro_button(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await full_start(callback.message, state)
 
-# ——— Reply "🔮 AI прогнозы" ———
-@dp.message(F.text == "🔮 AI прогнозы")
-async def bottom_start(message: Message, state: FSMContext):
-    await full_start(message, state)
-
-# ——— Показ категорий ———
+# ——— Получение прогнозов из базы данных ———
 async def full_start(message: Message, state: FSMContext):
-    # Получаем все данные пользователя
     data = await state.get_data()
-    # Инициализируем кеш прогнозов только один раз
-    if data.get("user_forecasts") is None:
-        user_forecasts = {}
-        for sport in CATEGORIES:
-            folder = f"forecasts/{sport}"
-            try:
-                files = [
-                    f for f in os.listdir(folder)
-                    if f.lower().endswith((".png","jpg","jpeg"))
-                ]
-            except FileNotFoundError:
-                files = []
-            user_forecasts[sport] = files
-        # Сохраняем в state
-        await state.update_data(user_forecasts=user_forecasts)
-    else:
-        user_forecasts = data["user_forecasts"]
+    user_forecasts = await get_forecasts_from_db()
 
-    # Отправляем клавиатуру с актуальными числами
-    await message.answer(
-        "Выбери категорию спорта для получения прогноза:",
-        reply_markup=generate_categories_keyboard(user_forecasts)
-    )
+    # Преобразуем данные для отображения в клавиатуре
+    forecasts = {}
+    for sport in CATEGORIES:
+        forecasts[sport] = []
+    for forecast in user_forecasts:
+        forecasts[forecast["sport"]].append(forecast)
+
+    await message.answer("Выбери категорию спорта для получения прогноза:",
+                         reply_markup=generate_categories_keyboard(forecasts))
     await message.answer("🦅", reply_markup=bottom_keyboard(message.from_user.id))
 
-# ——— Админ-панель ———
-@dp.message(F.text == "Админ")
-async def admin_menu_handler(message: Message):
-    logger.info(f"Запрошено админ-меню пользователем {message.from_user.id}")
-    await message.answer("Выберите действие:", reply_markup=admin_menu_keyboard())
-
-# ——— Админ callback’ы ———
-@dp.callback_query(F.data == "admin_upload")
-async def admin_upload(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await callback.message.answer("📤 Загрузка прогнозов…\nОтправьте фото для загрузки.")
-    await state.set_state(UploadState.waiting_photo)
-
-@dp.callback_query(F.data == "admin_view")
-async def admin_view(callback: CallbackQuery):
-    report = ""
-    for sport in CATEGORIES:
-        folder = f"forecasts/{sport}"
-        try:
-            count = len([f for f in os.listdir(folder) if f.lower().endswith((".png","jpg","jpeg"))])
-        except FileNotFoundError:
-            count = 0
-        report += f"{sport.capitalize()}: {count} шт.\n"
-    await callback.answer()
-    await callback.message.answer(f"📊 Статистика прогнозов:\n\n{report}")
-
-@dp.callback_query(F.data == "admin_clear")
-async def admin_clear(callback: CallbackQuery):
-    global TEXT_FORECAST
-    TEXT_FORECAST = ""  # Очищаем текстовый прогноз
-    for sport in CATEGORIES:
-        folder = f"forecasts/{sport}"
-        if os.path.exists(folder):
-            for f in os.listdir(folder):
-                os.remove(os.path.join(folder, f))
-    await callback.answer()
-    await callback.message.answer("🗑 Все прогнозы очищены.")
-
-@dp.callback_query(F.data == "admin_upload_text")
-async def admin_upload_text(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await callback.message.answer("Отправьте текст прогнозов:")
-    await state.set_state(UploadState.waiting_text)
-
-# ——— Загрузка текста ———
-@dp.message(StateFilter(UploadState.waiting_text))
-async def handle_text_upload(message: Message, state: FSMContext):
-    global TEXT_FORECAST
-    TEXT_FORECAST = message.text
-    await message.answer("Текстовый прогноз сохранён!")
-    await state.clear()
-
-# ——— Загрузка фото ———
+# Загрузка прогноза в базу данных и на диск
 @dp.message(F.photo, StateFilter(UploadState.waiting_photo))
 async def handle_photo_upload(message: Message, state: FSMContext):
     await state.update_data(photo_id=message.photo[-1].file_id)
@@ -234,40 +205,14 @@ async def save_to_category(callback: CallbackQuery, state: FSMContext):
     file_name = f"{len(files)+1}.jpg"
     file = await bot.get_file(photo_id)
     await bot.download_file(file.file_path, os.path.join(folder, file_name))
+
+    # Сохраняем прогноз в базу данных
+    file_path = os.path.join(folder, file_name)
+    await save_forecast_to_db(sport, file_name, file_path)
+    
     await callback.answer()
     await callback.message.answer(f"✅ Прогноз сохранён в категорию {sport.capitalize()}")
     await state.clear()
-
-# ——— Покупка прогноза ———
-@dp.callback_query(F.data.startswith("buy_"))
-async def buy_handler(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    user_forecasts = data.get("user_forecasts", {})
-    sport = callback.data.replace("buy_", "")
-    files = user_forecasts.get(sport, [])
-    if not files:
-        await callback.answer("Прогнозов в этой категории нет 😞", show_alert=True)
-        return
-    file_name = files.pop(0)
-    path = os.path.join(f"forecasts/{sport}", file_name)
-    photo = FSInputFile(path)
-    emojis = {"football":"⚽️","hockey":"🏒","dota":"🎮","cs":"🔫","tennis":"🎾"}
-    caption = f"{sport.capitalize()} {emojis.get(sport,'')}"
-    await callback.message.answer_photo(photo, caption=caption)
-    user_forecasts[sport] = files
-    await state.update_data(user_forecasts=user_forecasts)
-    await callback.message.edit_reply_markup(
-        reply_markup=generate_categories_keyboard(user_forecasts)
-    )
-    await callback.answer()
-
-# ——— Показ текстового прогноза ———
-@dp.message(F.text == "📝 Прогнозы текстом")
-async def show_text_forecast(message: Message):
-    if TEXT_FORECAST:
-        await message.answer(TEXT_FORECAST)
-    else:
-        await message.answer("Текстовых прогнозов нет 😞")
 
 # ——— Fallback ———
 @dp.message()
@@ -297,4 +242,5 @@ app.add_routes([
 app.on_startup.append(on_app_startup)
 
 if __name__ == "__main__":
-    web.run_app(app, host="0.0.0.0", port=PORT)
+    asyncio.run(main())
+
