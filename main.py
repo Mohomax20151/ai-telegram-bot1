@@ -128,7 +128,7 @@ def bottom_keyboard(user_id: int) -> ReplyKeyboardMarkup:
 
 # ——— /start ———
 @dp.message(Command("start"))
-async def start_handler(message: types.Message, state: FSMContext):
+async def start_handler(message: Message, state: FSMContext):
     data = await state.get_data()
     if not data.get("intro_done"):
         await bot.send_chat_action(message.chat.id, action="upload_video")
@@ -158,13 +158,12 @@ async def start_handler(message: types.Message, state: FSMContext):
             "🧩 Расширение функционала внутри бота"
         )
 
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔮 AI прогнозы", callback_data="start_predictions")]
-        ])
-        await message.answer("Нажмите, чтобы перейти в раздел прогнозов:", reply_markup=keyboard)
+        ikm = InlineKeyboardMarkup.model_validate({
+            "inline_keyboard":[[{"text":"🔮 AI прогнозы","callback_data":"start_predictions"}]]
+        })
+        await message.answer("Нажмите, чтобы перейти в раздел прогнозов:", reply_markup=ikm)
         await state.update_data(intro_done=True)
         return
-
     await full_start(message, state)
 
 # ——— Inline "AI прогнозы" ———
