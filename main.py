@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 import asyncpg
 import databases
 from aiogram import Bot, Dispatcher, F
