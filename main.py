@@ -243,5 +243,5 @@ app.add_routes([
 app.on_startup.append(on_app_startup)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    web.run_app(app, host="0.0.0.0", port=PORT)
 
