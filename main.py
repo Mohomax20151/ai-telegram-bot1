@@ -34,6 +34,13 @@ database = databases.Database(DATABASE_URL)
 BOT_TOKEN    = os.getenv("BOT_TOKEN",    "8094761598:AAFDmaV_qAKTim2YnkuN8ksQFvwNxds7HLQ")
 ADMIN_ID     = int(os.getenv("ADMIN_ID", "6688088575"))
 CATEGORIES   = ['football', 'hockey', 'dota', 'cs', 'tennis']
+EMOJI = {
+    'football': '⚽️',
+    'hockey' : '🏒',
+    'dota'   : '🎮',
+    'cs'     : '🔫',
+    'tennis' : '🎾',
+}
 WEBHOOK_HOST = os.getenv("WEBHOOK_HOST", "https://ai-telegram-bot1.onrender.com")
 WEBHOOK_PATH = f"/{BOT_TOKEN}"
 WEBHOOK_URL  = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
@@ -162,7 +169,7 @@ def generate_categories_keyboard(user_forecasts: dict) -> InlineKeyboardMarkup:
     for sport in CATEGORIES:
         count = len(user_forecasts.get(sport, []))
         cb = f"buy_{sport}" if count else "none"
-        kb.append([{"text": f"{sport.capitalize()} — {count}", "callback_data": cb}])
+        kb.append([{"text": f"{EMOJI[sport]} {sport.capitalize()} — {count}", "callback_data": cb}])
     return InlineKeyboardMarkup.model_validate({"inline_keyboard": kb})
 
 def admin_menu_keyboard() -> InlineKeyboardMarkup:
