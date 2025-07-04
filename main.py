@@ -318,7 +318,7 @@ async def on_app_startup(app):
     logger.info(f"Webhook set: {info}")
 
 app = web.Application()
-app.add_routes([
+app.add_routes([ 
     web.post(WEBHOOK_PATH, on_webhook),
     web.get("/", on_start),
 ])
