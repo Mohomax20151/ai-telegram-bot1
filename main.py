@@ -277,7 +277,8 @@ async def buy_handler(callback: CallbackQuery, state: FSMContext):
     file_name = files.pop(0)
     path = os.path.join(f"forecasts/{sport}", file_name)
     photo = FSInputFile(path)
-    await callback.message.answer_photo(photo, caption=f"{sport.capitalize()} ⚽️🎮🏒🎾".split()[CATEGORIES.index(sport)])
+    caption = f"{sport.capitalize()}"
+    await callback.message.answer_photo(photo, caption=caption)
     # помечаем выданным
     await mark_delivered(callback.from_user.id, file_name, sport)
     await state.update_data(user_forecasts=user_forecasts)
@@ -300,7 +301,7 @@ async def general_handler(message: Message):
     logger.info(f"Получено сообщение {message.message_id} от {message.from_user.id}")
     await message.answer("Я получил ваше сообщение! ✅")
 
-# ——— Webhook ———
+# ——— Webhook & Lifecycle ———
 async def on_start(request):
     return web.Response(text="Bot is running")
 
@@ -317,13 +318,16 @@ async def on_app_startup(app):
     info = await bot.set_webhook(WEBHOOK_URL)
     logger.info(f"Webhook set: {info}")
 
+async def on_cleanup(app):
+    await database.disconnect()
+
 app = web.Application()
-app.add_routes([ 
+app.add_routes([
     web.post(WEBHOOK_PATH, on_webhook),
     web.get("/", on_start),
 ])
 app.on_startup.append(on_app_startup)
-app.on_cleanup.append(lambda app: database.disconnect())
+app.on_cleanup.append(on_cleanup)
 
 if __name__ == "__main__":
     web.run_app(app, host="0.0.0.0", port=PORT)
